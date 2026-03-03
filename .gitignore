@@ -28,6 +28,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Blog drafts
+blog.md
+
 # Test files
 test-results/
 coverage/
