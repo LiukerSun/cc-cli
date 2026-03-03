@@ -7,9 +7,13 @@ param(
 )
 
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
-if (Test-Path $VERSION_FILE) {
-    $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+if ($SCRIPT_DIR) {
+    $VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
+    if (Test-Path $VERSION_FILE) {
+        $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+    } else {
+        $VERSION = "unknown"
+    }
 } else {
     $VERSION = "unknown"
 }
@@ -92,31 +96,33 @@ function Install-Script {
     Write-Warning "Installing cc command (branch: $Branch)..."
     
     $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
+    
+    if ($SCRIPT_DIR) {
+        $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
+        
+        if (Test-Path $localScript) {
+            Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
+            Write-Success "[OK] Installed cc.ps1 from local source"
+            Write-Host ""
+            return
+        }
+    }
+    
     Write-Host "Downloading from: $scriptUrl"
     
-    $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
-    
-    if (Test-Path $localScript) {
-        Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
-        Write-Success "[OK] Installed cc.ps1 from local source"
-    } else {
-        $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
-        Write-Host "Downloading from: $scriptUrl"
+    try {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Encoding = [System.Text.Encoding]::UTF8
+        $content = $webClient.DownloadString($scriptUrl)
         
-        try {
-            $webClient = New-Object System.Net.WebClient
-            $webClient.Encoding = [System.Text.Encoding]::UTF8
-            $content = $webClient.DownloadString($scriptUrl)
-            
-            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-            [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
-            
-            Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
-        } catch {
-            Write-Error "[X] Failed to download script: $_"
-            Write-Host "Please download manually from: $scriptUrl"
-            exit 1
-        }
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
+        
+        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+    } catch {
+        Write-Error "[X] Failed to download script: $_"
+        Write-Host "Please download manually from: $scriptUrl"
+        exit 1
     }
     
     Write-Host ""
