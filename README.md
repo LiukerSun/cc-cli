@@ -87,7 +87,7 @@ cc -Help
 
 ## 🚀 快速开始
 
-### 埥看所有模型
+### 查看所有模型
 
 ```bash
 cc --list
@@ -349,3 +349,4 @@ claude
 <div align="center">
   Made with ❤️ by the community
 </div>
+
