@@ -155,6 +155,93 @@ function Add-Model {
     Write-Host "  Add New Model Configuration" -ForegroundColor Cyan
     Write-Host "==================================="
     Write-Host ""
+    Write-Host "Select provider:"
+    Write-Host "  1) ZHIPU AI (智谱) - auto fetch models"
+    Write-Host "  2) Manual input"
+    Write-Host ""
+    
+    $choice = Read-Host "Choice [1-2]"
+    
+    switch ($choice) {
+        "1" { Add-ZhipuModel }
+        "2" { Add-ManualModel }
+        default {
+            Write-Error "Invalid choice"
+            exit 1
+        }
+    }
+}
+
+function Add-ZhipuModel {
+    Write-Host ""
+    Write-Host "==================================="
+    Write-Host "  ZHIPU AI Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+    
+    $apiKey = Read-Host "API Key"
+    if (-not $apiKey) {
+        Write-Error "API Key is required"
+        exit 1
+    }
+    
+    Write-Host ""
+    Write-Host "Fetching models from ZHIPU AI..." -NoNewline
+    
+    try {
+        $headers = @{
+            "Authorization" = "Bearer $apiKey"
+        }
+        $response = Invoke-RestMethod -Uri "https://open.bigmodel.cn/api/paas/v4/models" -Headers $headers -Method Get -ErrorAction Stop
+        
+        Write-Host " Done!"
+        Write-Host ""
+        
+        $models = $response.data | Sort-Object -Property id
+        
+        if ($models.Count -eq 0) {
+            Write-Error "No models found"
+            exit 1
+        }
+        
+        Write-Host "Available Models:"
+        Write-Host ""
+        
+        for ($i = 0; $i -lt $models.Count; $i++) {
+            Write-Host "  $($i + 1)) $($models[$i].id)"
+        }
+        Write-Host ""
+        
+        $mainIdx = Read-Host "Select main model [1-$($models.Count)]"
+        if (-not ($mainIdx -match "^\d+$") -or [int]$mainIdx -lt 1 -or [int]$mainIdx -gt $models.Count) {
+            Write-Error "Invalid selection"
+            exit 1
+        }
+        $mainModel = $models[[int]$mainIdx - 1].id
+        
+        $fastIdx = Read-Host "Select fast model [1-$($models.Count)] (default: same as main)"
+        $fastModel = $mainModel
+        if ($fastIdx -and $fastIdx -match "^\d+$" -and [int]$fastIdx -ge 1 -and [int]$fastIdx -le $models.Count) {
+            $fastModel = $models[[int]$fastIdx - 1].id
+        }
+        
+        $modelName = "ZHIPU ($mainModel)"
+        
+        Save-ModelConfig -Name $modelName -BaseUrl "https://open.bigmodel.cn/api/anthropic" -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
+        
+    } catch {
+        Write-Host ""
+        Write-Error "Failed to fetch models: $_"
+        exit 1
+    }
+}
+
+function Add-ManualModel {
+    Write-Host ""
+    Write-Host "==================================="
+    Write-Host "  Manual Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
     
     $name = Read-Host "Model name (e.g., 'GPT-4')"
     if (-not $name) {
@@ -187,27 +274,36 @@ function Add-Model {
         $fastModel = $mainModel
     }
     
-    # Load existing config
+    Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
+}
+
+function Save-ModelConfig {
+    param(
+        [string]$Name,
+        [string]$BaseUrl,
+        [string]$ApiKey,
+        [string]$MainModel,
+        [string]$FastModel
+    )
+    
     $config = Get-Content $CONFIG_FILE | ConvertFrom-Json
     
-    # Add new model
     $newModel = @{
-        name = $name
+        name = $Name
         env = @{
-            ANTHROPIC_BASE_URL = $baseUrl
-            ANTHROPIC_AUTH_TOKEN = $apiKey
-            ANTHROPIC_MODEL = $mainModel
-            ANTHROPIC_SMALL_FAST_MODEL = $fastModel
+            ANTHROPIC_BASE_URL = $BaseUrl
+            ANTHROPIC_AUTH_TOKEN = $ApiKey
+            ANTHROPIC_MODEL = $MainModel
+            ANTHROPIC_SMALL_FAST_MODEL = $FastModel
         }
     }
     
     $config += $newModel
     
-    # Save config
     Save-JsonNoBOM -Path $CONFIG_FILE -Object $config
     
     Write-Host ""
-    Write-Host "[OK] Model '$name' added successfully!" -ForegroundColor Green
+    Write-Host "[OK] Model '$Name' added successfully!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Configuration saved to: $CONFIG_FILE"
 }

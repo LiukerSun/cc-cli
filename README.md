@@ -125,6 +125,37 @@ cc -E    # 用 vim 打开配置文件
 cc -a    # 交互式添加新模型
 ```
 
+支持两种添加方式：
+1. **厂商自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
+2. **手动输入** - 手动填写所有配置信息
+
+#### ZHIPU AI 快速配置示例
+
+```bash
+$ cc -a
+Select provider:
+  1) ZHIPU AI (智谱) - auto fetch models
+  2) Manual input
+
+Choice [1-2]: 1
+
+API Key: your-zhipu-api-key
+
+Fetching models from ZHIPU AI... Done!
+
+Available Models:
+
+   1) GLM-4-0520
+   2) GLM-4-Air
+   3) GLM-4-AirX
+   ...
+
+Select main model [1-N]: 2
+Select fast model [1-N] (default: same as main): 3
+
+✓ Model 'ZHIPU (GLM-4-Air)' added successfully!
+```
+
 ## 📖 命令参考
 
 ### 基础命令
