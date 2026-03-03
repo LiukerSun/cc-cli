@@ -90,15 +90,21 @@ function Create-Directories {
 function Install-Script {
     Write-Warning "Installing cc command..."
     
-    # Download the PowerShell script
-    $scriptUrl = "$REPO_URL/raw/main/bin/cc.ps1"
-    try {
-        Invoke-WebRequest -Uri $scriptUrl -OutFile $SCRIPT_FILE -ErrorAction Stop
-        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
-    } catch {
-        Write-Error "[X] Failed to download script: $_"
-        Write-Host "Please download manually from: $scriptUrl"
-        exit 1
+    $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
+    
+    if (Test-Path $localScript) {
+        Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
+        Write-Success "[OK] Installed cc.ps1 from local source"
+    } else {
+        $scriptUrl = "$REPO_URL/raw/main/bin/cc.ps1"
+        try {
+            Invoke-WebRequest -Uri $scriptUrl -OutFile $SCRIPT_FILE -ErrorAction Stop
+            Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+        } catch {
+            Write-Error "[X] Failed to download script: $_"
+            Write-Host "Please download manually from: $scriptUrl"
+            exit 1
+        }
     }
     
     Write-Host ""
