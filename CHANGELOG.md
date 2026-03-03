@@ -2,6 +2,22 @@
 
 本项目的所有重要变更都将记录在此文件中。
 
+## [1.2.0] - 2025-03-03
+
+### 新增
+- **--version 命令** - 添加 `-V, --version` 选项显示版本号
+- **--delete 命令** - 添加 `-d, --delete N` 选项删除指定模型配置
+- **VERSION 文件** - 统一版本号管理，所有脚本读取同一个 VERSION 文件
+
+### 修复
+- **Bash 3.2 兼容性** - 将 `[[ =~ ]]` 正则匹配替换为 `case` 语句，提高 macOS 默认 Bash 版本兼容性
+
+### 变更
+- install.sh - 从 VERSION 文件读取版本号
+- install.ps1 - 从 VERSION 文件读取版本号
+- bin/cc - 添加版本号读取和 delete_model 函数
+- bin/cc.ps1 - 添加版本号读取和 Remove-Model 函数
+
 ## [1.1.0] - 2025-03-03
 
 ### 修复
