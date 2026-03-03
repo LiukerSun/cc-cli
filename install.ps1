@@ -157,21 +157,22 @@ function cc {
         New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
     }
     
-    # Add to profile
-    $needsAdd = $true
+    # Remove old wrapper if exists
     if (Test-Path $PROFILE) {
-        if (Select-String -Path $PROFILE -Pattern "CC-CLI PowerShell Wrapper" -Quiet) {
-            $needsAdd = $false
-        }
+        $profileContent = Get-Content $PROFILE -Raw
+        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function cc \{.*?\}'
+        $profileContent = $profileContent -replace $pattern, ''
+        $profileContent = $profileContent.TrimEnd()
+        
+        # Save cleaned profile
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($PROFILE, $profileContent, $utf8NoBom)
     }
     
-    if ($needsAdd) {
-        Add-Content -Path $PROFILE -Value "`n$wrapperContent"
-        Write-Success "✓ Added cc function to PowerShell profile"
-        Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
-    } else {
-        Write-Success "✓ Already in PowerShell profile"
-    }
+    # Add new wrapper
+    Add-Content -Path $PROFILE -Value "`n`n$wrapperContent"
+    Write-Success "✓ Added cc function to PowerShell profile"
+    Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
     Write-Host ""
 }
 
