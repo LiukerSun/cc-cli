@@ -1,14 +1,12 @@
 # CC-CLI - PowerShell Version
 # https://github.com/LiukerSun/cc-cli
 
-param(
-    [Parameter(ValueFromRemainingArguments)]
-    [string[]]$Arguments
-)
-
 # Configuration
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
 $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
+
+# Use $args instead of param() for flexible argument parsing
+# All arguments are available in $args array
 
 # Functions
 function Show-Help {
@@ -320,8 +318,8 @@ $modelIndex = 0
 $claudeArgs = @()
 $foundSeparator = $false
 
-for ($i = 0; $i -lt $Arguments.Count; $i++) {
-    $arg = $Arguments[$i]
+for ($i = 0; $i -lt $args.Count; $i++) {
+    $arg = $args[$i]
     
     if ($foundSeparator) {
         $claudeArgs += $arg
