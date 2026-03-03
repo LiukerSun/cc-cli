@@ -7,6 +7,8 @@ param(
 )
 
 $scriptPath = $MyInvocation.MyCommand.Path
+$REPO_URL = "https://github.com/LiukerSun/cc-cli"
+
 if ($scriptPath) {
     $SCRIPT_DIR = Split-Path -Parent $scriptPath
     $VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
@@ -17,10 +19,13 @@ if ($scriptPath) {
     }
 } else {
     $SCRIPT_DIR = $null
-    $VERSION = "unknown"
+    try {
+        $versionUrl = "$REPO_URL/raw/$Branch/VERSION"
+        $VERSION = (New-Object System.Net.WebClient).DownloadString($versionUrl).Trim()
+    } catch {
+        $VERSION = "unknown"
+    }
 }
-
-$REPO_URL = "https://github.com/LiukerSun/cc-cli"
 
 # Installation paths
 $INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
