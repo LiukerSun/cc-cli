@@ -1,49 +1,49 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project will be documented in this file.
+本项目的所有重要变更都将记录在此文件中。
 
 ## [1.1.0] - 2025-03-03
 
-### Fixed
-- **Windows PowerShell BOM handling** - Fixed UTF-8 BOM detection and removal in fix-config.ps1 using byte arrays instead of strings
-- **UTF-8 encoding issues** - All scripts now save configuration files without BOM to prevent JSON parsing errors
-- **PowerShell array unwrapping** - Fixed single-element array unwrapping issue by using @() wrapper for Get-Models
-- **Empty argument handling** - Added check to skip null or whitespace arguments to prevent "Unknown option" errors
-- **PowerShell wrapper function** - Simplified wrapper and auto-update mechanism for better compatibility
-- **Unicode character display** - Replaced ✓ and other Unicode characters with ASCII equivalents ([OK]) for better terminal compatibility
-- **Output formatting** - Fixed header display issues in Select-Interactive function
+### 修复
+- **Windows PowerShell BOM 处理** - 修复 fix-config.ps1 中的 UTF-8 BOM 检测和移除逻辑，使用字节数组代替字符串
+- **UTF-8 编码问题** - 所有脚本现在保存配置文件时不带 BOM，以防止 JSON 解析错误
+- **PowerShell 数组解包** - 通过使用 @() 包装 Get-Models 修复单元素数组解包问题
+- **空参数处理** - 添加检查以跳过空值或空白参数，防止"未知选项"错误
+- **PowerShell 包装函数** - 简化包装器和自动更新机制以提高兼容性
+- **Unicode 字符显示** - 将 ✓ 和其他 Unicode 字符替换为 ASCII 等效字符（[OK]）以提高终端兼容性
+- **输出格式化** - 修复 Select-Interactive 函数中的标题显示问题
 
-### Changed
-- install.ps1 - Added Save-FileNoBOM helper function and improved wrapper replacement logic
-- fix-config.ps1 - Rewrote with English messages and proper BOM byte handling
-- bin/cc.ps1 - Added Save-JsonNoBOM helper and @() wrappers for all Get-Models calls
+### 变更
+- install.ps1 - 添加 Save-FileNoBOM 辅助函数并改进包装器替换逻辑
+- fix-config.ps1 - 使用英文消息重写并正确处理 BOM 字节
+- bin/cc.ps1 - 添加 Save-JsonNoBOM 辅助函数并为所有 Get-Models 调用添加 @() 包装器
 
-### Windows Compatibility
-- Improved compatibility with Windows PowerShell 5.1
-- Better handling of UTF-8 encoding across different PowerShell versions
-- Fixed issues with Chinese character display in Windows terminals
+### Windows 兼容性
+- 改进与 Windows PowerShell 5.1 的兼容性
+- 更好地处理不同 PowerShell 版本中的 UTF-8 编码
+- 修复 Windows 终端中的中文字符显示问题
 
 ## [1.0.0] - 2024-03-03
 
-### Added
-- Interactive model selection with arrow keys
-- Direct model selection by number
-- API key management (view, add, edit)
-- Bypass permissions support
-- Configuration file management
-- Colored terminal output
-- Installation and uninstall scripts
-- Comprehensive documentation
+### 新增功能
+- 使用上下键的交互式模型选择
+- 按数字直接选择模型
+- API 密钥管理（查看、添加、编辑）
+- Bypass 权限支持
+- 配置文件管理
+- 彩色终端输出
+- 安装和卸载脚本
+- 完整的文档
 
-### Features
-- Zero external dependencies (pure Bash)
-- Compatible with Bash 3.2+ (macOS default)
-- Automatic shell integration
-- Persistent configuration
-- Model history tracking
+### 特性
+- 零外部依赖（纯 Bash 实现）
+- 兼容 Bash 3.2+（macOS 默认版本）
+- 自动 shell 集成
+- 持久化配置
+- 模型历史记录
 
-### Documentation
+### 文档
 - README.md
 - LICENSE
-- Installation guide
-- Configuration examples
+- 安装指南
+- 配置示例
