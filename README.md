@@ -10,13 +10,13 @@
 
 <p align="center">
   <a href="https://github.com/LiukerSun/cc-cli/stargazers">
-    <img src="https://img.shields.io/github/stars/LiukerSun/cc-cli?style=social" alt="GitHub stars">
+    <img src="https://img.shields.io/github/stars/LiukerSun/cc-cli.svg" alt="GitHub stars">
   </a>
   <a href="https://github.com/LiukerSun/cc-cli/issues">
-    <img src="https://img.shields.io/github/issues/LiukerSun/cc-cli?style=social" alt="GitHub issues">
+    <img src="https://img.shields.io/github/issues/LiukerSun/cc-cli.svg" alt="GitHub issues">
   </a>
   <a href="https://github.com/LiukerSun/cc-cli/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/LiukerSun/cc-cli?style=social" alt="License">
+    <img src="https://img.shields.io/github/license/LiukerSun/cc-cli.svg" alt="License">
   </a>
 </p>
 
