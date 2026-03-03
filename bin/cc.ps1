@@ -12,10 +12,6 @@ if (Test-Path $VERSION_FILE) {
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
 $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
 
-# Use $args instead of param() for flexible argument parsing
-# All arguments are available in $args array
-
-# Helper function to save UTF-8 without BOM
 function Save-JsonNoBOM {
     param(
         [string]$Path,
@@ -80,8 +76,11 @@ function Show-List {
         $currentModel = Select-String -Path $ENV_FILE -Pattern "# Model: (.*)" | ForEach-Object { $_.Matches.Groups[1].Value }
     }
     
+    $validCount = 0
     for ($i = 0; $i -lt $models.Count; $i++) {
         $model = $models[$i]
+        if (-not $model.name) { continue }
+        $validCount++
         $num = $i + 1
         
         if ($model.name -eq $currentModel) {
@@ -90,6 +89,10 @@ function Show-List {
         } else {
             Write-Host "    $num) $($model.name)"
         }
+    }
+    
+    if ($validCount -eq 0) {
+        Write-Host "  No models configured." -ForegroundColor Yellow
     }
     
     Write-Host ""
@@ -117,11 +120,13 @@ function Show-Keys {
     Write-Host "==================================="
     Write-Host ""
     
+    $hasModels = $false
     for ($i = 0; $i -lt $models.Count; $i++) {
         $model = $models[$i]
+        if (-not $model.name) { continue }
+        $hasModels = $true
         $num = $i + 1
         
-        # Mask the key
         $key = $model.env.ANTHROPIC_AUTH_TOKEN
         $maskedKey = if ($key.Length -gt 12) { 
             $key.Substring(0,8) + "..." + $key.Substring($key.Length - 4) 
@@ -132,6 +137,11 @@ function Show-Keys {
         Write-Host "$num) $($model.name)" -ForegroundColor Cyan
         Write-Host "   URL: $($model.env.ANTHROPIC_BASE_URL)"
         Write-Host "   Key: $maskedKey" -ForegroundColor Gray
+        Write-Host ""
+    }
+    
+    if (-not $hasModels) {
+        Write-Host "  No models configured." -ForegroundColor Yellow
         Write-Host ""
     }
     
@@ -168,6 +178,93 @@ function Add-Model {
     Write-Host "  Add New Model Configuration" -ForegroundColor Cyan
     Write-Host "==================================="
     Write-Host ""
+    Write-Host "Select provider:"
+    Write-Host "  1) ZHIPU AI - auto fetch models"
+    Write-Host "  2) Manual input"
+    Write-Host ""
+    
+    $choice = Read-Host "Choice [1-2]"
+    
+    switch ($choice) {
+        "1" { Add-ZhipuModel }
+        "2" { Add-ManualModel }
+        default {
+            Write-Error "Invalid choice"
+            exit 1
+        }
+    }
+}
+
+function Add-ZhipuModel {
+    Write-Host ""
+    Write-Host "==================================="
+    Write-Host "  ZHIPU AI Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+    
+    $apiKey = Read-Host "API Key"
+    if (-not $apiKey) {
+        Write-Error "API Key is required"
+        exit 1
+    }
+    
+    Write-Host ""
+    Write-Host "Fetching models from ZHIPU AI..." -NoNewline
+    
+    try {
+        $headers = @{
+            "Authorization" = "Bearer $apiKey"
+        }
+        $response = Invoke-RestMethod -Uri "https://open.bigmodel.cn/api/paas/v4/models" -Headers $headers -Method Get -ErrorAction Stop
+        
+        Write-Host " Done!"
+        Write-Host ""
+        
+        $models = @($response.data | Sort-Object -Property id)
+        
+        if ($models.Count -eq 0) {
+            Write-Error "No models found"
+            exit 1
+        }
+        
+        Write-Host "Available Models:"
+        Write-Host ""
+        
+        for ($i = 0; $i -lt $models.Count; $i++) {
+            Write-Host "  $($i + 1)) $($models[$i].id)"
+        }
+        Write-Host ""
+        
+        $mainIdx = Read-Host "Select main model [1-$($models.Count)]"
+        if (-not ($mainIdx -match "^\d+$") -or [int]$mainIdx -lt 1 -or [int]$mainIdx -gt $models.Count) {
+            Write-Error "Invalid selection"
+            exit 1
+        }
+        $mainModel = $models[[int]$mainIdx - 1].id
+        
+        $fastIdx = Read-Host "Select fast model [1-$($models.Count)] (default: same as main)"
+        $fastModel = $mainModel
+        if ($fastIdx -and $fastIdx -match "^\d+$" -and [int]$fastIdx -ge 1 -and [int]$fastIdx -le $models.Count) {
+            $fastModel = $models[[int]$fastIdx - 1].id
+        }
+        
+        $modelName = "ZHIPU ($mainModel)"
+        
+        Save-ModelConfig -Name $modelName -BaseUrl "https://open.bigmodel.cn/api/anthropic" -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
+        
+    } catch {
+        Write-Host ""
+        Write-Error "Failed to fetch models: $_"
+        exit 1
+    }
+}
+
+function Add-ManualModel {
+    Write-Host ""
+    Write-Host "==================================="
+    Write-Host "  Manual Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
     
     $name = Read-Host "Model name (e.g., 'GPT-4')"
     if (-not $name) {
@@ -200,27 +297,39 @@ function Add-Model {
         $fastModel = $mainModel
     }
     
-    # Load existing config
-    $config = Get-Content $CONFIG_FILE | ConvertFrom-Json
+    Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
+}
+
+function Save-ModelConfig {
+    param(
+        [string]$Name,
+        [string]$BaseUrl,
+        [string]$ApiKey,
+        [string]$MainModel,
+        [string]$FastModel
+    )
     
-    # Add new model
+    $config = @()
+    if (Test-Path $CONFIG_FILE) {
+        $config = @(Get-Content $CONFIG_FILE | ConvertFrom-Json)
+    }
+    
     $newModel = @{
-        name = $name
+        name = $Name
         env = @{
-            ANTHROPIC_BASE_URL = $baseUrl
-            ANTHROPIC_AUTH_TOKEN = $apiKey
-            ANTHROPIC_MODEL = $mainModel
-            ANTHROPIC_SMALL_FAST_MODEL = $fastModel
+            ANTHROPIC_BASE_URL = $BaseUrl
+            ANTHROPIC_AUTH_TOKEN = $ApiKey
+            ANTHROPIC_MODEL = $MainModel
+            ANTHROPIC_SMALL_FAST_MODEL = $FastModel
         }
     }
     
-    $config += $newModel
+    $config = @($config) + @($newModel)
     
-    # Save config
     Save-JsonNoBOM -Path $CONFIG_FILE -Object $config
     
     Write-Host ""
-    Write-Host "[OK] Model '$name' added successfully!" -ForegroundColor Green
+    Write-Host "[OK] Model '$Name' added successfully!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Configuration saved to: $CONFIG_FILE"
 }
@@ -282,8 +391,14 @@ function Select-Interactive {
     $models = @(Get-Models)
     
     if ($models.Count -eq 0) {
-        Write-Error "No models found"
-        exit 1
+        Write-Host "==================================="
+        Write-Host "  No Models Configured" -ForegroundColor Yellow
+        Write-Host "==================================="
+        Write-Host ""
+        Write-Host "Please add a model first:" -ForegroundColor Cyan
+        Write-Host "  cc -a        Add a new model"
+        Write-Host ""
+        exit 0
     }
     
     $currentModel = ""
@@ -291,34 +406,93 @@ function Select-Interactive {
         $currentModel = Select-String -Path $ENV_FILE -Pattern "# Model: (.*)" | ForEach-Object { $_.Matches.Groups[1].Value }
     }
     
-    Write-Host "==================================="
-    Write-Host "  Available AI Models" -ForegroundColor Cyan
-    Write-Host "==================================="
-    Write-Host ""
-    
+    $selected = 1
     for ($i = 0; $i -lt $models.Count; $i++) {
-        $model = $models[$i]
-        $num = $i + 1
-        
-        if ($model.name -eq $currentModel) {
-            Write-Host "  > $num) $($model.name)" -ForegroundColor Green -NoNewline
-            Write-Host " (current)" -ForegroundColor Gray
-        } else {
-            Write-Host "    $num) $($model.name)"
+        if ($models[$i].name -eq $currentModel) {
+            $selected = $i + 1
+            break
         }
     }
     
-    Write-Host ""
-    Write-Host "-----------------------------------"
-    Write-Host ""
+    function Draw-Menu {
+        param([int]$Selected)
+        
+        [Console]::Clear()
+        Write-Host "==================================="
+        Write-Host "  Available AI Models" -ForegroundColor Cyan
+        Write-Host "==================================="
+        Write-Host ""
+        
+        for ($i = 0; $i -lt $models.Count; $i++) {
+            $num = $i + 1
+            $name = $models[$i].name
+            $isCurrent = ($name -eq $currentModel)
+            
+            if ($i + 1 -eq $Selected) {
+                Write-Host "  > " -NoNewline
+                Write-Host "$num) $name" -BackgroundColor DarkBlue -ForegroundColor White -NoNewline
+                if ($isCurrent) {
+                    Write-Host " (current)" -ForegroundColor Gray
+                } else {
+                    Write-Host ""
+                }
+            } else {
+                if ($isCurrent) {
+                    Write-Host "  > " -NoNewline
+                    Write-Host "$num) $name" -ForegroundColor Green -NoNewline
+                    Write-Host " (current)" -ForegroundColor Gray
+                } else {
+                    Write-Host "    $num) $name"
+                }
+            }
+        }
+        
+        Write-Host ""
+        Write-Host "-----------------------------------"
+        Write-Host ""
+        Write-Host "  Up/Down: Navigate  |  Enter: Select  |  q: Exit" -ForegroundColor DarkGray
+    }
     
-    $selection = Read-Host "Select model [1-$($models.Count)]"
+    Draw-Menu -Selected $selected
+    [Console]::CursorVisible = $false
     
-    if ($selection -match "^\d+$" -and [int]$selection -ge 1 -and [int]$selection -le $models.Count) {
-        return [int]$selection
-    } else {
-        Write-Error "Invalid selection"
-        exit 1
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        
+        switch ($key.Key) {
+            "UpArrow" {
+                $selected--
+                if ($selected -lt 1) { $selected = $models.Count }
+                Draw-Menu -Selected $selected
+            }
+            "DownArrow" {
+                $selected++
+                if ($selected -gt $models.Count) { $selected = 1 }
+                Draw-Menu -Selected $selected
+            }
+            "Enter" {
+                [Console]::CursorVisible = $true
+                Write-Host ""
+                Write-Host ""
+                Write-Host "[OK] Using model: $($models[$selected - 1].name)" -ForegroundColor Cyan
+                return $selected
+            }
+            "Q" {
+                [Console]::CursorVisible = $true
+                exit 1
+            }
+            "Escape" {
+                [Console]::CursorVisible = $true
+                exit 1
+            }
+            { $_ -match "D([1-9])" } {
+                $num = [int]$key.KeyChar
+                if ($num -le $models.Count) {
+                    $selected = $num
+                    Draw-Menu -Selected $selected
+                }
+            }
+        }
     }
 }
 
@@ -347,7 +521,6 @@ function Run-WithModel {
     
     Write-Host "-----------------------------------"
     
-    # Create env file
     $envContent = "# Generated by cc command`n"
     $envContent += "# Model: $($model.name)`n"
     $envContent += "`$env:ANTHROPIC_BASE_URL = `"$($model.env.ANTHROPIC_BASE_URL)`"`n"
@@ -368,7 +541,6 @@ function Run-WithModel {
         exit 0
     }
     
-    # Set environment variables and run claude
     $env:ANTHROPIC_BASE_URL = $model.env.ANTHROPIC_BASE_URL
     $env:ANTHROPIC_AUTH_TOKEN = $model.env.ANTHROPIC_AUTH_TOKEN
     $env:ANTHROPIC_MODEL = $model.env.ANTHROPIC_MODEL
@@ -378,7 +550,6 @@ function Run-WithModel {
         $env:CLAUDE_SKIP_PERMISSIONS = "1"
     }
     
-    # Run claude
     if (Get-Command claude -ErrorAction SilentlyContinue) {
         & claude @ClaudeArgs
     } else {
@@ -393,7 +564,6 @@ $onlyEnv = $false
 $modelIndex = 0
 $claudeArgs = @()
 $foundSeparator = $false
-$deleteIndex = 0
 
 for ($i = 0; $i -lt $args.Count; $i++) {
     $arg = $args[$i]
@@ -431,7 +601,6 @@ for ($i = 0; $i -lt $args.Count; $i++) {
     }
 }
 
-# Run
 if ($modelIndex -eq 0) {
     $modelIndex = Select-Interactive
 }
