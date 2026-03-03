@@ -137,12 +137,7 @@ function Create-Wrapper {
     $wrapperContent = @'
 # CC-CLI PowerShell Wrapper
 function cc {
-    param(
-        [Parameter(ValueFromRemainingArguments)]
-        [string[]]$Arguments
-    )
-    
-    & "$env:USERPROFILE\bin\cc.ps1" @Arguments
+    & "$env:USERPROFILE\bin\cc.ps1" @args
 }
 '@
     
