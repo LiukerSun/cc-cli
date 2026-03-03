@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LiukerSun/cc-cli/stars">
+  <a href="https://github.com/LiukerSun/cc-cli/stargazers">
     <img src="https://img.shields.io/github/stars/LiukerSun/cc-cli.svg?style=social" alt="GitHub stars">
   </a>
   <a href="https://github.com/LiukerSun/cc-cli/issues">
