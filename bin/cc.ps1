@@ -1,7 +1,14 @@
 # CC-CLI - PowerShell Version
 # https://github.com/LiukerSun/cc-cli
 
-# Configuration
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$VERSION_FILE = Join-Path $SCRIPT_DIR "..\VERSION"
+if (Test-Path $VERSION_FILE) {
+    $CC_VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+} else {
+    $CC_VERSION = "unknown"
+}
+
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
 $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
 
@@ -20,7 +27,6 @@ function Save-JsonNoBOM {
     [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
 }
 
-# Functions
 function Show-Help {
     Write-Host "Usage: cc [OPTIONS] [MODEL_INDEX] [-- CLAUDE_ARGS...]"
     Write-Host ""
@@ -33,7 +39,9 @@ function Show-Help {
     Write-Host "  -c, -current    Show current model"
     Write-Host "  -E, -edit       Edit configuration file"
     Write-Host "  -a, -add        Add a new model configuration"
+    Write-Host "  -d, -delete N   Delete model #N"
     Write-Host "  -s, -show       Show API keys (partially hidden)"
+    Write-Host "  -V, -version    Show version"
     Write-Host "  -h, -help       Show this help message"
     Write-Host ""
     Write-Host "Examples:"
@@ -42,6 +50,11 @@ function Show-Help {
     Write-Host "  cc -y 3         Start Claude with model #3 and bypass"
     Write-Host "  cc -E           Edit configuration file"
     Write-Host "  cc -a           Add a new model"
+    Write-Host "  cc -d 2         Delete model #2"
+}
+
+function Show-Version {
+    Write-Host "cc version $CC_VERSION"
 }
 
 function Get-Models {
@@ -212,6 +225,59 @@ function Add-Model {
     Write-Host "Configuration saved to: $CONFIG_FILE"
 }
 
+function Remove-Model {
+    param(
+        [int]$Index
+    )
+    
+    if (-not (Test-Path $CONFIG_FILE)) {
+        Write-Error "Config file not found: $CONFIG_FILE"
+        exit 1
+    }
+    
+    $models = @(Get-Models)
+    
+    if ($Index -lt 1 -or $Index -gt $models.Count) {
+        Write-Error "Invalid model index. Must be between 1 and $($models.Count)"
+        exit 1
+    }
+    
+    $modelName = $models[$Index - 1].name
+    
+    Write-Host "==================================="
+    Write-Host "  Delete Model Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+    Write-Host "  Model to delete: $Index) $modelName"
+    Write-Host ""
+    
+    $confirm = Read-Host "Are you sure? (y/N)"
+    
+    if ($confirm -notin @("y", "Y", "yes", "YES")) {
+        Write-Host "Cancelled."
+        exit 0
+    }
+    
+    $newModels = @()
+    for ($i = 0; $i -lt $models.Count; $i++) {
+        if ($i -ne ($Index - 1)) {
+            $newModels += $models[$i]
+        }
+    }
+    
+    if ($newModels.Count -eq 0) {
+        "[]" | Out-File -FilePath $CONFIG_FILE -Encoding UTF8
+    } else {
+        Save-JsonNoBOM -Path $CONFIG_FILE -Object $newModels
+    }
+    
+    Write-Host ""
+    Write-Host "[OK] Model '$modelName' deleted successfully!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Remaining models:"
+    Show-List
+}
+
 function Select-Interactive {
     $models = @(Get-Models)
     
@@ -322,12 +388,12 @@ function Run-WithModel {
     }
 }
 
-# Parse arguments
 $skipPerm = $false
 $onlyEnv = $false
 $modelIndex = 0
 $claudeArgs = @()
 $foundSeparator = $false
+$deleteIndex = 0
 
 for ($i = 0; $i -lt $args.Count; $i++) {
     $arg = $args[$i]
@@ -342,7 +408,17 @@ for ($i = 0; $i -lt $args.Count; $i++) {
             { $_ -in "-c", "-current", "--current" } { Show-Current; exit 0 }
             { $_ -in "-E", "-edit", "--edit" } { Edit-Config; exit 0 }
             { $_ -in "-a", "-add", "--add" } { Add-Model; exit 0 }
+            { $_ -in "-d", "-delete", "--delete" } {
+                $i++
+                if ($i -ge $args.Count) {
+                    Write-Error "--delete requires a model index"
+                    exit 1
+                }
+                Remove-Model -Index ([int]$args[$i])
+                exit 0
+            }
             { $_ -in "-s", "-show", "--show-keys" } { Show-Keys; exit 0 }
+            { $_ -in "-V", "-version", "--version" } { Show-Version; exit 0 }
             { $_ -in "-h", "-help", "--help" } { Show-Help; exit 0 }
             "--" { $foundSeparator = $true }
             { $_ -match "^\d+$" } { $modelIndex = [int]$_ }

@@ -5,8 +5,14 @@ param(
     [string]$Action = "install"
 )
 
-# Version
-$VERSION = "1.0.0"
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
+if (Test-Path $VERSION_FILE) {
+    $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+} else {
+    $VERSION = "unknown"
+}
+
 $REPO_URL = "https://github.com/LiukerSun/cc-cli"
 
 # Installation paths
