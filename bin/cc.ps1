@@ -544,12 +544,12 @@ function Run-WithModel {
     $env:ANTHROPIC_MODEL = $model.env.ANTHROPIC_MODEL
     $env:ANTHROPIC_SMALL_FAST_MODEL = $model.env.ANTHROPIC_SMALL_FAST_MODEL
     
-    if ($SkipPerm) {
-        $env:CLAUDE_SKIP_PERMISSIONS = "1"
-    }
-    
     if (Get-Command claude -ErrorAction SilentlyContinue) {
-        & claude @ClaudeArgs
+        if ($SkipPerm) {
+            & claude --dangerously-skip-permissions @ClaudeArgs
+        } else {
+            & claude @ClaudeArgs
+        }
     } else {
         Write-Error "Claude CLI not found"
         Write-Host "Install from: https://claude.ai"
