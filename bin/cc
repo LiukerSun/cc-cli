@@ -1,7 +1,6 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION_FILE="$SCRIPT_DIR/../VERSION"
+VERSION_FILE="$HOME/.cc-cli/VERSION"
 if [ -f "$VERSION_FILE" ]; then
     CC_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
 else
