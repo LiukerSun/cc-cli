@@ -152,7 +152,14 @@ function cc {
     }
     
     # Add to profile
-    if (-not (Select-String -Path $PROFILE -Pattern "CC-CLI PowerShell Wrapper" -Quiet)) {
+    $needsAdd = $true
+    if (Test-Path $PROFILE) {
+        if (Select-String -Path $PROFILE -Pattern "CC-CLI PowerShell Wrapper" -Quiet) {
+            $needsAdd = $false
+        }
+    }
+    
+    if ($needsAdd) {
         Add-Content -Path $PROFILE -Value "`n$wrapperContent"
         Write-Success "✓ Added cc function to PowerShell profile"
         Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
