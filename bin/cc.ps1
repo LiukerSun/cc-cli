@@ -8,6 +8,18 @@ $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
 # Use $args instead of param() for flexible argument parsing
 # All arguments are available in $args array
 
+# Helper function to save UTF-8 without BOM
+function Save-JsonNoBOM {
+    param(
+        [string]$Path,
+        $Object
+    )
+    
+    $json = $Object | ConvertTo-Json -Depth 10
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
+}
+
 # Functions
 function Show-Help {
     Write-Host "Usage: cc [OPTIONS] [MODEL_INDEX] [-- CLAUDE_ARGS...]"
@@ -39,11 +51,11 @@ function Get-Models {
     }
     
     $config = Get-Content $CONFIG_FILE | ConvertFrom-Json
-    return $config
+    return @($config)
 }
 
 function Show-List {
-    $models = Get-Models
+    $models = @(Get-Models)
     
     Write-Host "==================================="
     Write-Host "  Available AI Models" -ForegroundColor Cyan
@@ -85,7 +97,7 @@ function Show-Current {
 }
 
 function Show-Keys {
-    $models = Get-Models
+    $models = @(Get-Models)
     
     Write-Host "==================================="
     Write-Host "  API Keys Overview" -ForegroundColor Cyan
@@ -192,7 +204,7 @@ function Add-Model {
     $config += $newModel
     
     # Save config
-    $config | ConvertTo-Json -Depth 10 | Out-File -FilePath $CONFIG_FILE -Encoding UTF8
+    Save-JsonNoBOM -Path $CONFIG_FILE -Object $config
     
     Write-Host ""
     Write-Host "✓ Model '$name' added successfully!" -ForegroundColor Green
@@ -201,7 +213,7 @@ function Add-Model {
 }
 
 function Select-Interactive {
-    $models = Get-Models
+    $models = @(Get-Models)
     
     if ($models.Count -eq 0) {
         Write-Error "No models found"
@@ -253,7 +265,7 @@ function Run-WithModel {
         [string[]]$ClaudeArgs
     )
     
-    $models = Get-Models
+    $models = @(Get-Models)
     
     if ($ModelIndex -lt 1 -or $ModelIndex -gt $models.Count) {
         Write-Error "Invalid model index: $ModelIndex"

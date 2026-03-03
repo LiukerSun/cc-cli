@@ -1,17 +1,29 @@
-# CC-CLI Windows 诊断脚本
-# 运行此脚本诊断和修复配置文件问题
+# CC-CLI Windows Diagnostic Script
+# Run this script to diagnose and fix configuration file issues
 
-Write-Host "=== CC-CLI Windows 诊断 ===" -ForegroundColor Cyan
+# Helper function to save UTF-8 without BOM
+function Save-JsonNoBOM {
+    param(
+        [string]$Path,
+        $Object
+    )
+    
+    $json = $Object | ConvertTo-Json -Depth 10
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
+}
+
+Write-Host "=== CC-CLI Windows Diagnostic ===" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. 检查配置文件
-Write-Host "1. 检查配置文件..." -ForegroundColor Yellow
+# 1. Check config file
+Write-Host "1. Checking config file..." -ForegroundColor Yellow
 $configPath = "$env:USERPROFILE\.cc-config.json"
 
 if (-not (Test-Path $configPath)) {
-    Write-Host "✗ 配置文件不存在: $configPath" -ForegroundColor Red
+    Write-Host "X Config file not found: $configPath" -ForegroundColor Red
     Write-Host ""
-    Write-Host "正在创建配置文件..." -ForegroundColor Yellow
+    Write-Host "Creating config file..." -ForegroundColor Yellow
     
     $defaultConfig = @(
         @{
@@ -25,47 +37,52 @@ if (-not (Test-Path $configPath)) {
         }
     )
     
-    $defaultConfig | ConvertTo-Json -Depth 10 | Out-File -FilePath $configPath -Encoding UTF8
-    Write-Host "✓ 已创建默认配置文件" -ForegroundColor Green
+    Save-JsonNoBOM -Path $configPath -Object $defaultConfig
+    Write-Host "+ Created default config file" -ForegroundColor Green
 } else {
-    Write-Host "✓ 配置文件存在: $configPath" -ForegroundColor Green
+    Write-Host "+ Config file exists: $configPath" -ForegroundColor Green
     
-    # 检查内容
-    $content = Get-Content $configPath -Raw
+    # Check content and handle BOM
+    $bytes = [System.IO.File]::ReadAllBytes($configPath)
     
-    # 检查 BOM
-    if ($content.Length -ge 3 -and $content[0] -eq [char]0xEF -and $content[1] -eq [char]0xBB -and $content[2] -eq [char]0xBF) {
-        Write-Host "✗ 检测到 BOM 标记" -ForegroundColor Red
-        Write-Host "  正在移除 BOM..." -ForegroundColor Yellow
+    # Check BOM (UTF-8 BOM: EF BB BF)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        Write-Host "X BOM marker detected" -ForegroundColor Red
+        Write-Host "  Removing BOM..." -ForegroundColor Yellow
         
-        # 移除 BOM 并重新保存
-        $content = $content[3..($content.Length - 1)]
-        [System.IO.File]::WriteAllBytes($configPath, $content)
-        Write-Host "✓ 已移除 BOM" -ForegroundColor Green
+        # Remove BOM and save
+        $newBytes = $bytes[3..($bytes.Length - 1)]
+        [System.IO.File]::WriteAllBytes($configPath, $newBytes)
+        Write-Host "+ BOM removed" -ForegroundColor Green
     }
     
-    # 尝试解析 JSON
+    # Re-read content
+    $content = [System.IO.File]::ReadAllText($configPath)
+    
+    # Try to parse JSON
     Write-Host ""
-    Write-Host "2. 测试 JSON 解析..." -ForegroundColor Yellow
+    Write-Host "2. Testing JSON parsing..." -ForegroundColor Yellow
     try {
         $config = Get-Content $configPath | ConvertFrom-Json
-        Write-Host "✓ JSON 解析成功" -ForegroundColor Green
-        Write-Host "  模型数量: $($config.Count)" -ForegroundColor Cyan
+        Write-Host "+ JSON parsing successful" -ForegroundColor Green
+        Write-Host "  Model count: $($config.Count)" -ForegroundColor Cyan
         
         Write-Host ""
-        Write-Host "3. 模型列表:" -ForegroundColor Yellow
+        Write-Host "3. Model list:" -ForegroundColor Yellow
         for ($i = 0; $i -lt $config.Count; $i++) {
             $model = $config[$i]
-            Write-Host "  $($i + 1)) $($model.name)" -ForegroundColor Cyan
+            $num = $i + 1
+            $line = "  $num) " + $model.name
+            Write-Host $line -ForegroundColor Cyan
         }
         
     } catch {
-        Write-Host "✗ JSON 解析失败" -ForegroundColor Red
-        Write-Host "  错误: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "X JSON parsing failed" -ForegroundColor Red
+        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
-        Write-Host "正在修复配置文件..." -ForegroundColor Yellow
+        Write-Host "Fixing config file..." -ForegroundColor Yellow
         
-        # 创建正确的配置
+        # Create correct config
         $fixedConfig = @(
             @{
                 name = "ZHIPU AI"
@@ -78,12 +95,12 @@ if (-not (Test-Path $configPath)) {
             }
         )
         
-        $fixedConfig | ConvertTo-Json -Depth 10 | Out-File -FilePath $configPath -Encoding UTF8
-        Write-Host "✓ 配置文件已修复" -ForegroundColor Green
+        Save-JsonNoBOM -Path $configPath -Object $fixedConfig
+        Write-Host "+ Config file fixed" -ForegroundColor Green
     }
 }
 
 Write-Host ""
-Write-Host "=== 诊断完成 ===" -ForegroundColor Green
+Write-Host "=== Diagnostic Complete ===" -ForegroundColor Green
 Write-Host ""
-Write-Host "请运行 'cc --list' 测试" -ForegroundColor Yellow
+Write-Host "Please run 'cc --list' to test" -ForegroundColor Yellow

@@ -29,6 +29,17 @@ function Write-Info { Write-ColorOutput Cyan $args }
 function Write-Warning { Write-ColorOutput Yellow $args }
 function Write-Error { Write-ColorOutput Red $args }
 
+# Helper function to save UTF-8 without BOM
+function Save-FileNoBOM {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+    
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 # Banner
 Write-Info "==================================="
 Write-Info "  CC-CLI Installer v$VERSION (PowerShell)"
@@ -104,7 +115,7 @@ function Create-Config {
             "}"
         ) -join "`n"
         
-        Set-Content -Path $CONFIG_FILE -Value "[$defaultConfig]"
+        Save-FileNoBOM -Path $CONFIG_FILE -Content "[$defaultConfig]"
         Write-Success "✓ Created config file: $CONFIG_FILE"
         Write-Warning "  Please edit this file to add your API keys"
     } else {
