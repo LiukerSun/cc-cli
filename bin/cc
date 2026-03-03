@@ -130,8 +130,14 @@ select_interactive() {
     
     local count=${#models[@]}
     if [ $count -eq 0 ]; then
-        echo "No models found" >&2
-        exit 1
+        echo "═══════════════════════════════════════"
+        echo "  No Models Configured"
+        echo "═══════════════════════════════════════"
+        echo ""
+        echo "Please add a model first:"
+        echo "  cc -a        Add a new model"
+        echo ""
+        exit 0
     fi
     
     local current_model=""
@@ -326,6 +332,103 @@ add_model() {
     echo "  Add New Model Configuration"
     echo "═══════════════════════════════════════"
     echo ""
+    echo "Select provider:"
+    echo "  1) ZHIPU AI - auto fetch models"
+    echo "  2) Manual input"
+    echo ""
+    read -p "Choice [1-2]: " provider_choice
+    
+    if [ "$provider_choice" = "1" ]; then
+        add_zhipu_model
+    elif [ "$provider_choice" = "2" ]; then
+        add_manual_model
+    else
+        echo "Error: Invalid choice"
+        exit 1
+    fi
+}
+
+add_zhipu_model() {
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  ZHIPU AI Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+    read -p "API Key: " api_key
+    [ -z "$api_key" ] && echo "Error: API Key is required" && exit 1
+    
+    echo ""
+    printf "Fetching models from ZHIPU AI"
+    
+    local models_url="https://open.bigmodel.cn/api/paas/v4/models"
+    local response
+    response=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $api_key" "$models_url" 2>/dev/null)
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" != "200" ]; then
+        echo ""
+        echo "Error: Failed to fetch models (HTTP $http_code)"
+        echo "Response: $body"
+        exit 1
+    fi
+    
+    echo " Done!"
+    echo ""
+    
+    local model_list
+    model_list=$(echo "$body" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"$//' | sort)
+    
+    if [ -z "$model_list" ]; then
+        echo "Error: No models found in response"
+        exit 1
+    fi
+    
+    local models=()
+    while IFS= read -r model; do
+        models+=("$model")
+    done <<< "$model_list"
+    
+    local count=${#models[@]}
+    
+    echo "Available Models:"
+    echo ""
+    local i=1
+    for model in "${models[@]}"; do
+        printf "  %2d) %s\n" "$i" "$model"
+        ((i++))
+    done
+    echo ""
+    
+    read -p "Select main model [1-$count]: " main_idx
+    if ! [[ "$main_idx" =~ ^[0-9]+$ ]] || [ "$main_idx" -lt 1 ] || [ "$main_idx" -gt "$count" ]; then
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+    local main_model="${models[$main_idx-1]}"
+    
+    read -p "Select fast model [1-$count] (default: same as main): " fast_idx
+    local fast_model
+    if [ -z "$fast_idx" ]; then
+        fast_model="$main_model"
+    elif [[ "$fast_idx" =~ ^[0-9]+$ ]] && [ "$fast_idx" -ge 1 ] && [ "$fast_idx" -le "$count" ]; then
+        fast_model="${models[$fast_idx-1]}"
+    else
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+    
+    local model_name="ZHIPU ($main_model)"
+    
+    save_model_config "$model_name" "https://open.bigmodel.cn/api/anthropic" "$api_key" "$main_model" "$fast_model"
+}
+
+add_manual_model() {
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  Manual Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
     
     read -p "Model name (e.g., 'GPT-4'): " model_name
     [ -z "$model_name" ] && echo "Error: Name is required" && exit 1
@@ -344,7 +447,16 @@ add_model() {
     read -p "Fast Model (optional, press Enter to use main model): " fast_model
     [ -z "$fast_model" ] && fast_model="$main_model"
     
-    # Create new entry
+    save_model_config "$model_name" "$base_url" "$api_key" "$main_model" "$fast_model"
+}
+
+save_model_config() {
+    local model_name="$1"
+    local base_url="$2"
+    local api_key="$3"
+    local main_model="$4"
+    local fast_model="$5"
+    
     local new_entry=$(cat <<EOF
     {
         "name": "$model_name",
@@ -358,13 +470,9 @@ add_model() {
 EOF
 )
     
-    # Add to config file
     if [ $(wc -l < "$CONFIG_FILE") -eq 1 ]; then
-        # Empty array, just add the entry
         echo "[$new_entry]" > "$CONFIG_FILE"
     else
-        # Append to existing array
-        # Remove last ], add comma, append entry, add ]
         sed -i.bak '$ d' "$CONFIG_FILE"
         echo "," >> "$CONFIG_FILE"
         echo "$new_entry" >> "$CONFIG_FILE"
