@@ -6,8 +6,9 @@ param(
     [string]$Branch = "main"
 )
 
-$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-if ($SCRIPT_DIR) {
+$scriptPath = $MyInvocation.MyCommand.Path
+if ($scriptPath) {
+    $SCRIPT_DIR = Split-Path -Parent $scriptPath
     $VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
     if (Test-Path $VERSION_FILE) {
         $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
@@ -15,6 +16,7 @@ if ($SCRIPT_DIR) {
         $VERSION = "unknown"
     }
 } else {
+    $SCRIPT_DIR = $null
     $VERSION = "unknown"
 }
 
