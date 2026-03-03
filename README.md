@@ -34,10 +34,29 @@
 
 ## 📦 安装
 
-### 快速安装（推荐）
+### macOS / Linux (Bash)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+# 以管理员身份运行 PowerShell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# 一键安装
+irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
+```
+
+或者手动安装：
+```powershell
+# 下载安装脚本
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 -OutFile install.ps1
+
+# 运行安装
+.\install.ps1
 ```
 
 ### 手动安装
@@ -47,15 +66,23 @@ curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | 
 git clone https://github.com/LiukerSun/cc-cli.git
 cd cc-cli
 
-# 运行安装脚本
+# macOS/Linux
 ./install.sh
+
+# Windows
+.\install.ps1
 ```
 
 ### 验证安装
 
 ```bash
+# macOS/Linux
 cc --version
 cc --help
+
+# Windows PowerShell
+cc -Version
+cc -Help
 ```
 
 ## 🚀 快速开始
