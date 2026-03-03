@@ -327,34 +327,93 @@ function Select-Interactive {
         $currentModel = Select-String -Path $ENV_FILE -Pattern "# Model: (.*)" | ForEach-Object { $_.Matches.Groups[1].Value }
     }
     
-    Write-Host "==================================="
-    Write-Host "  Available AI Models" -ForegroundColor Cyan
-    Write-Host "==================================="
-    Write-Host ""
-    
+    $selected = 1
     for ($i = 0; $i -lt $models.Count; $i++) {
-        $model = $models[$i]
-        $num = $i + 1
-        
-        if ($model.name -eq $currentModel) {
-            Write-Host "  > $num) $($model.name)" -ForegroundColor Green -NoNewline
-            Write-Host " (current)" -ForegroundColor Gray
-        } else {
-            Write-Host "    $num) $($model.name)"
+        if ($models[$i].name -eq $currentModel) {
+            $selected = $i + 1
+            break
         }
     }
     
-    Write-Host ""
-    Write-Host "-----------------------------------"
-    Write-Host ""
+    function Draw-Menu {
+        param([int]$Selected)
+        
+        [Console]::Clear()
+        Write-Host "==================================="
+        Write-Host "  Available AI Models" -ForegroundColor Cyan
+        Write-Host "==================================="
+        Write-Host ""
+        
+        for ($i = 0; $i -lt $models.Count; $i++) {
+            $num = $i + 1
+            $name = $models[$i].name
+            $isCurrent = ($name -eq $currentModel)
+            
+            if ($i + 1 -eq $Selected) {
+                Write-Host "  > " -NoNewline
+                Write-Host "$num) $name" -BackgroundColor DarkBlue -ForegroundColor White -NoNewline
+                if ($isCurrent) {
+                    Write-Host " (current)" -ForegroundColor Gray
+                } else {
+                    Write-Host ""
+                }
+            } else {
+                if ($isCurrent) {
+                    Write-Host "  > " -NoNewline
+                    Write-Host "$num) $name" -ForegroundColor Green -NoNewline
+                    Write-Host " (current)" -ForegroundColor Gray
+                } else {
+                    Write-Host "    $num) $name"
+                }
+            }
+        }
+        
+        Write-Host ""
+        Write-Host "-----------------------------------"
+        Write-Host ""
+        Write-Host "  Up/Down: Navigate  |  Enter: Select  |  q: Exit" -ForegroundColor DarkGray
+    }
     
-    $selection = Read-Host "Select model [1-$($models.Count)]"
+    Draw-Menu -Selected $selected
+    [Console]::CursorVisible = $false
     
-    if ($selection -match "^\d+$" -and [int]$selection -ge 1 -and [int]$selection -le $models.Count) {
-        return [int]$selection
-    } else {
-        Write-Error "Invalid selection"
-        exit 1
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        
+        switch ($key.Key) {
+            "UpArrow" {
+                $selected--
+                if ($selected -lt 1) { $selected = $models.Count }
+                Draw-Menu -Selected $selected
+            }
+            "DownArrow" {
+                $selected++
+                if ($selected -gt $models.Count) { $selected = 1 }
+                Draw-Menu -Selected $selected
+            }
+            "Enter" {
+                [Console]::CursorVisible = $true
+                Write-Host ""
+                Write-Host ""
+                Write-Host "[OK] Using model: $($models[$selected - 1].name)" -ForegroundColor Cyan
+                return $selected
+            }
+            "Q" {
+                [Console]::CursorVisible = $true
+                exit 1
+            }
+            "Escape" {
+                [Console]::CursorVisible = $true
+                exit 1
+            }
+            { $_ -match "D([1-9])" } {
+                $num = [int]$key.KeyChar
+                if ($num -le $models.Count) {
+                    $selected = $num
+                    Draw-Menu -Selected $selected
+                }
+            }
+        }
     }
 }
 
