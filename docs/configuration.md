@@ -26,9 +26,9 @@ CC-CLI 的配置文件位于 `~/.cc-config.json`
 
 - `name` - 模型的显示名称（必填）
 - `env.ANTHROPIC_BASE_URL` - API 端点 URL（必填）
-- `env.aNTHROPIC_AUTH_TOKEN` - API 密钥（必填）
-- `env.aNTHROPIC_MODEL` - 主模型 ID（必填）
-- `env.aNTHROPIC_SMALL_FAST_MODEL` - 快速模型 ID（可选，默认与主模型相同)
+- `env.ANTHROPIC_AUTH_TOKEN` - API 密钥（必填）
+- `env.ANTHROPIC_MODEL` - 主模型 ID（必填）
+- `env.ANTHROPIC_SMALL_FAST_MODEL` - 快速模型 ID（可选，默认与主模型相同)
 
 ## 添加新模型
 
@@ -77,7 +77,7 @@ vim ~/.cc-config.json
 }
 ```
 
-### OpenAI 兩点
+### OpenAI 端点
 
 ```json
 {
@@ -147,7 +147,7 @@ cc --add
 
 ### 权限问题
 ```bash
-# 磀保安装目录权限
+# 确保安装目录权限
 chmod 755 ~/.cc-cli
 chmod +x ~/bin/cc
 ```
