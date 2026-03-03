@@ -30,9 +30,9 @@ function Write-Warning { Write-ColorOutput Yellow $args }
 function Write-Error { Write-ColorOutput Red $args }
 
 # Banner
-Write-Info "═══════════════════════════════════════"
+Write-Info "==================================="
 Write-Info "  CC-CLI Installer v$VERSION (PowerShell)"
-Write-Info "═══════════════════════════════════════"
+Write-Info "==================================="
 Write-Host ""
 
 # Check requirements
@@ -171,9 +171,9 @@ function cc {
 
 # Print success message
 function Print-Success {
-    Write-Success "═══════════════════════════════════════"
+    Write-Success "==================================="
     Write-Success "  Installation Complete!"
-    Write-Success "═══════════════════════════════════════"
+    Write-Success "==================================="
     Write-Host ""
     
     Write-Info "Next steps:"
