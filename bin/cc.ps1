@@ -207,7 +207,7 @@ function Add-Model {
     Save-JsonNoBOM -Path $CONFIG_FILE -Object $config
     
     Write-Host ""
-    Write-Host "✓ Model '$name' added successfully!" -ForegroundColor Green
+    Write-Host "[OK] Model '$name' added successfully!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Configuration saved to: $CONFIG_FILE"
 }
@@ -225,8 +225,7 @@ function Select-Interactive {
         $currentModel = Select-String -Path $ENV_FILE -Pattern "# Model: (.*)" | ForEach-Object { $_.Matches.Groups[1].Value }
     }
     
-    Write-Host "===================================" -NoNewline
-    Write-Host "`r" -NoNewline
+    Write-Host "==================================="
     Write-Host "  Available AI Models" -ForegroundColor Cyan
     Write-Host "==================================="
     Write-Host ""
@@ -274,10 +273,10 @@ function Run-WithModel {
     
     $model = $models[$ModelIndex - 1]
     
-    Write-Host "✓ Using model: $($model.name)" -ForegroundColor Cyan
+    Write-Host "[OK] Using model: $($model.name)" -ForegroundColor Cyan
     
     if ($SkipPerm) {
-        Write-Host "✓ Bypass permissions enabled" -ForegroundColor Yellow
+        Write-Host "[OK] Bypass permissions enabled" -ForegroundColor Yellow
     }
     
     Write-Host "-----------------------------------"
