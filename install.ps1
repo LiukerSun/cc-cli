@@ -109,6 +109,10 @@ function Install-Script {
         
         if (Test-Path $localScript) {
             Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
+            $localVersion = Join-Path $SCRIPT_DIR "VERSION"
+            if (Test-Path $localVersion) {
+                Copy-Item -Path $localVersion -Destination "$INSTALL_DIR\VERSION" -Force
+            }
             Write-Success "[OK] Installed cc.ps1 from local source"
             Write-Host ""
             return
@@ -126,6 +130,16 @@ function Install-Script {
         [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
         
         Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+        
+        $versionDest = "$INSTALL_DIR\VERSION"
+        $versionUrl = "$REPO_URL/raw/$Branch/VERSION"
+        try {
+            $versionContent = $webClient.DownloadString($versionUrl).Trim()
+            [System.IO.File]::WriteAllText($versionDest, $versionContent, $utf8NoBom)
+            Write-Success "[OK] Downloaded VERSION to $versionDest"
+        } catch {
+            Write-Warning "[!] Could not download VERSION file"
+        }
     } catch {
         Write-Error "[X] Failed to download script: $_"
         Write-Host "Please download manually from: $scriptUrl"

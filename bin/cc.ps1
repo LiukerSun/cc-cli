@@ -1,12 +1,10 @@
 # CC-CLI - PowerShell Version
 # https://github.com/LiukerSun/cc-cli
 
-$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$VERSION_FILE = Join-Path $SCRIPT_DIR "..\VERSION"
+$CC_VERSION = "unknown"
+$VERSION_FILE = "$env:USERPROFILE\.cc-cli\VERSION"
 if (Test-Path $VERSION_FILE) {
     $CC_VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
-} else {
-    $CC_VERSION = "unknown"
 }
 
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
