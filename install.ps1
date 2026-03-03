@@ -58,17 +58,17 @@ function Check-Requirements {
     
     # Check PowerShell version
     if ($PSVersionTable.PSVersion.Major -lt 5) {
-        Write-Error "✗ PowerShell 5.0 or later is required"
+        Write-Error "[X] PowerShell 5.0 or later is required"
         exit 1
     }
-    Write-Success "✓ PowerShell $($PSVersionTable.PSVersion) found"
+    Write-Success "[OK] PowerShell $($PSVersionTable.PSVersion) found"
     
     # Check for claude command
     if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Warning "⚠ Claude CLI not found (optional)"
+        Write-Warning "[!] Claude CLI not found (optional)"
         Write-Host "  Install from: https://claude.ai"
     } else {
-        Write-Success "✓ Claude CLI found"
+        Write-Success "[OK] Claude CLI found"
     }
     
     Write-Host ""
@@ -81,8 +81,8 @@ function Create-Directories {
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $SCRIPT_FILE -Parent) | Out-Null
     
-    Write-Success "✓ Created $INSTALL_DIR"
-    Write-Success "✓ Created $(Split-Path $SCRIPT_FILE -Parent)"
+    Write-Success "[OK] Created $INSTALL_DIR"
+    Write-Success "[OK] Created $(Split-Path $SCRIPT_FILE -Parent)"
     Write-Host ""
 }
 
@@ -94,9 +94,9 @@ function Install-Script {
     $scriptUrl = "$REPO_URL/raw/main/bin/cc.ps1"
     try {
         Invoke-WebRequest -Uri $scriptUrl -OutFile $SCRIPT_FILE -ErrorAction Stop
-        Write-Success "✓ Downloaded cc.ps1 to $SCRIPT_FILE"
+        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
     } catch {
-        Write-Error "✗ Failed to download script: $_"
+        Write-Error "[X] Failed to download script: $_"
         Write-Host "Please download manually from: $scriptUrl"
         exit 1
     }
@@ -122,10 +122,10 @@ function Create-Config {
         ) -join "`n"
         
         Save-FileNoBOM -Path $CONFIG_FILE -Content "[$defaultConfig]"
-        Write-Success "✓ Created config file: $CONFIG_FILE"
+        Write-Success "[OK] Created config file: $CONFIG_FILE"
         Write-Warning "  Please edit this file to add your API keys"
     } else {
-        Write-Success "✓ Config file already exists: $CONFIG_FILE"
+        Write-Success "[OK] Config file already exists: $CONFIG_FILE"
     }
     Write-Host ""
 }
@@ -139,10 +139,10 @@ function Add-ToPath {
     
     if ($currentPath -notlike "*$binDir*") {
         [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$binDir", "User")
-        Write-Success "✓ Added $binDir to PATH"
+        Write-Success "[OK] Added $binDir to PATH"
         Write-Warning "  Please restart your terminal or run: `$env:PATH += `";$binDir`""
     } else {
-        Write-Success "✓ Already in PATH"
+        Write-Success "[OK] Already in PATH"
     }
     Write-Host ""
 }
@@ -177,7 +177,7 @@ function cc {
     
     # Add new wrapper
     Add-Content -Path $PROFILE -Value "`n`n$wrapperContent"
-    Write-Success "✓ Added cc function to PowerShell profile"
+    Write-Success "[OK] Added cc function to PowerShell profile"
     Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
     Write-Host ""
 }
@@ -229,7 +229,7 @@ function Uninstall {
         Remove-Item $INSTALL_DIR -Recurse -Force
     }
     
-    Write-Success "✓ Uninstalled cc-cli"
+    Write-Success "[OK] Uninstalled cc-cli"
     Write-Warning "  Config file preserved: $CONFIG_FILE"
     Write-Warning "  Remove manually if needed: Remove-Item `"$CONFIG_FILE`""
     exit 0
