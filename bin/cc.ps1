@@ -156,7 +156,7 @@ function Add-Model {
     Write-Host "==================================="
     Write-Host ""
     Write-Host "Select provider:"
-    Write-Host "  1) ZHIPU AI (智谱) - auto fetch models"
+    Write-Host "  1) ZHIPU AI - auto fetch models"
     Write-Host "  2) Manual input"
     Write-Host ""
     
@@ -312,8 +312,14 @@ function Select-Interactive {
     $models = @(Get-Models)
     
     if ($models.Count -eq 0) {
-        Write-Error "No models found"
-        exit 1
+        Write-Host "==================================="
+        Write-Host "  No Models Configured" -ForegroundColor Yellow
+        Write-Host "==================================="
+        Write-Host ""
+        Write-Host "Please add a model first:" -ForegroundColor Cyan
+        Write-Host "  cc -a        Add a new model"
+        Write-Host ""
+        exit 0
     }
     
     $currentModel = ""

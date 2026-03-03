@@ -130,8 +130,14 @@ select_interactive() {
     
     local count=${#models[@]}
     if [ $count -eq 0 ]; then
-        echo "No models found" >&2
-        exit 1
+        echo "═══════════════════════════════════════"
+        echo "  No Models Configured"
+        echo "═══════════════════════════════════════"
+        echo ""
+        echo "Please add a model first:"
+        echo "  cc -a        Add a new model"
+        echo ""
+        exit 0
     fi
     
     local current_model=""
@@ -327,7 +333,7 @@ add_model() {
     echo "═══════════════════════════════════════"
     echo ""
     echo "Select provider:"
-    echo "  1) ZHIPU AI (智谱) - auto fetch models"
+    echo "  1) ZHIPU AI - auto fetch models"
     echo "  2) Manual input"
     echo ""
     read -p "Choice [1-2]: " provider_choice

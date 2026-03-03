@@ -2,7 +2,8 @@
 # https://github.com/LiukerSun/cc-cli
 
 param(
-    [string]$Action = "install"
+    [string]$Action = "install",
+    [string]$Branch = "main"
 )
 
 # Version
@@ -52,17 +53,17 @@ function Check-Requirements {
     
     # Check PowerShell version
     if ($PSVersionTable.PSVersion.Major -lt 5) {
-        Write-Error "✗ PowerShell 5.0 or later is required"
+        Write-Error "[X] PowerShell 5.0 or later is required"
         exit 1
     }
-    Write-Success "✓ PowerShell $($PSVersionTable.PSVersion) found"
+    Write-Success "[OK] PowerShell $($PSVersionTable.PSVersion) found"
     
     # Check for claude command
     if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Warning "⚠ Claude CLI not found (optional)"
+        Write-Warning "[!] Claude CLI not found (optional)"
         Write-Host "  Install from: https://claude.ai"
     } else {
-        Write-Success "✓ Claude CLI found"
+        Write-Success "[OK] Claude CLI found"
     }
     
     Write-Host ""
@@ -75,22 +76,29 @@ function Create-Directories {
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $SCRIPT_FILE -Parent) | Out-Null
     
-    Write-Success "✓ Created $INSTALL_DIR"
-    Write-Success "✓ Created $(Split-Path $SCRIPT_FILE -Parent)"
+    Write-Success "[OK] Created $INSTALL_DIR"
+    Write-Success "[OK] Created $(Split-Path $SCRIPT_FILE -Parent)"
     Write-Host ""
 }
 
 # Download main script
 function Install-Script {
-    Write-Warning "Installing cc command..."
+    Write-Warning "Installing cc command (branch: $Branch)..."
     
-    # Download the PowerShell script
-    $scriptUrl = "$REPO_URL/raw/main/bin/cc.ps1"
+    $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
+    Write-Host "Downloading from: $scriptUrl"
+    
     try {
-        Invoke-WebRequest -Uri $scriptUrl -OutFile $SCRIPT_FILE -ErrorAction Stop
-        Write-Success "✓ Downloaded cc.ps1 to $SCRIPT_FILE"
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Encoding = [System.Text.Encoding]::UTF8
+        $content = $webClient.DownloadString($scriptUrl)
+        
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
+        
+        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
     } catch {
-        Write-Error "✗ Failed to download script: $_"
+        Write-Error "[X] Failed to download script: $_"
         Write-Host "Please download manually from: $scriptUrl"
         exit 1
     }
@@ -116,10 +124,10 @@ function Create-Config {
         ) -join "`n"
         
         Save-FileNoBOM -Path $CONFIG_FILE -Content "[$defaultConfig]"
-        Write-Success "✓ Created config file: $CONFIG_FILE"
+        Write-Success "[OK] Created config file: $CONFIG_FILE"
         Write-Warning "  Please edit this file to add your API keys"
     } else {
-        Write-Success "✓ Config file already exists: $CONFIG_FILE"
+        Write-Success "[OK] Config file already exists: $CONFIG_FILE"
     }
     Write-Host ""
 }
@@ -133,10 +141,10 @@ function Add-ToPath {
     
     if ($currentPath -notlike "*$binDir*") {
         [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$binDir", "User")
-        Write-Success "✓ Added $binDir to PATH"
+        Write-Success "[OK] Added $binDir to PATH"
         Write-Warning "  Please restart your terminal or run: `$env:PATH += `";$binDir`""
     } else {
-        Write-Success "✓ Already in PATH"
+        Write-Success "[OK] Already in PATH"
     }
     Write-Host ""
 }
@@ -171,7 +179,7 @@ function cc {
     
     # Add new wrapper
     Add-Content -Path $PROFILE -Value "`n`n$wrapperContent"
-    Write-Success "✓ Added cc function to PowerShell profile"
+    Write-Success "[OK] Added cc function to PowerShell profile"
     Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
     Write-Host ""
 }
@@ -223,7 +231,7 @@ function Uninstall {
         Remove-Item $INSTALL_DIR -Recurse -Force
     }
     
-    Write-Success "✓ Uninstalled cc-cli"
+    Write-Success "[OK] Uninstalled cc-cli"
     Write-Warning "  Config file preserved: $CONFIG_FILE"
     Write-Warning "  Remove manually if needed: Remove-Item `"$CONFIG_FILE`""
     exit 0
@@ -233,12 +241,20 @@ function Uninstall {
 switch ($Action.ToLower()) {
     "uninstall" { Uninstall }
     "help" {
-        Write-Host "Usage: .\install.ps1 [ACTION]"
+        Write-Host "Usage: .\install.ps1 [-Branch <name>] [ACTION]"
         Write-Host ""
         Write-Host "Actions:"
         Write-Host "  install     Install cc-cli (default)"
         Write-Host "  uninstall   Remove cc-cli"
         Write-Host "  help        Show this help message"
+        Write-Host ""
+        Write-Host "Options:"
+        Write-Host "  -Branch     Specify branch to install (default: main)"
+        Write-Host ""
+        Write-Host "Examples:"
+        Write-Host "  .\install.ps1"
+        Write-Host "  .\install.ps1 -Branch feature/auto-fetch-zhipu-models"
+        Write-Host "  .\install.ps1 -Action uninstall"
         exit 0
     }
     default {
