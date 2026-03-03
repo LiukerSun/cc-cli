@@ -34,3 +34,6 @@ blog.md
 # Test files
 test-results/
 coverage/
+
+# Development files
+DEVELOPMENT.md

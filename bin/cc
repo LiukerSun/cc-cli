@@ -1,6 +1,13 @@
 #!/bin/bash
 
-# Platform detection
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSION_FILE="$SCRIPT_DIR/../VERSION"
+if [ -f "$VERSION_FILE" ]; then
+    CC_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+else
+    CC_VERSION="unknown"
+fi
+
 detect_platform() {
     case "$(uname -s)" in
         Darwin*)    echo "macos" ;;
@@ -10,7 +17,6 @@ detect_platform() {
     esac
 }
 
-# Platform-specific settings
 PLATFORM=$(detect_platform)
 CONFIG_FILE="$HOME/.cc-config.json"
 ENV_FILE="/tmp/cc-model-env.sh"
@@ -38,7 +44,9 @@ usage() {
     echo "  -c, --current   Show current model"
     echo "  -E, --edit      Edit configuration file"
     echo "  -a, --add       Add a new model configuration"
+    echo "  -d, --delete N  Delete model #N"
     echo "  -s, --show      Show API keys (partially hidden)"
+    echo "  -V, --version   Show version"
     echo "  -h, --help      Show this help message"
     echo ""
     echo "Examples:"
@@ -47,7 +55,12 @@ usage() {
     echo "  cc -y 3         Start Claude with model #3 and bypass permissions"
     echo "  cc -E           Edit configuration file"
     echo "  cc -a           Add a new model"
+    echo "  cc -d 2         Delete model #2"
     echo "  cc -s           Show API keys"
+}
+
+show_version() {
+    echo "cc version $CC_VERSION"
 }
 
 list_models() {
@@ -246,7 +259,6 @@ run_with_model() {
     local count=$(get_model_count)
     
     if [ -z "$model_index" ]; then
-        # Interactive selection with arrow keys
         trap 'show_cursor' EXIT
         local selection=$(select_interactive)
         if [ -z "$selection" ]; then
@@ -256,7 +268,14 @@ run_with_model() {
         trap - EXIT
     fi
     
-    if ! [[ "$model_index" =~ ^[0-9]+$ ]] || [ "$model_index" -lt 1 ] || [ "$model_index" -gt "$count" ]; then
+    case "$model_index" in
+        ''|*[!0-9]*)
+            echo "Error: Invalid model index. Must be between 1 and $count"
+            exit 1
+            ;;
+    esac
+    
+    if [ "$model_index" -lt 1 ] || [ "$model_index" -gt "$count" ]; then
         echo "Error: Invalid model index. Must be between 1 and $count"
         exit 1
     fi
@@ -485,6 +504,92 @@ EOF
     echo "Configuration saved to: $CONFIG_FILE"
 }
 
+delete_model() {
+    local index=$1
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Error: Config file not found at $CONFIG_FILE"
+        exit 1
+    fi
+    
+    local count=$(get_model_count)
+    
+    case "$index" in
+        ''|*[!0-9]*)
+            echo "Error: Invalid model index. Must be a number."
+            exit 1
+            ;;
+    esac
+    
+    if [ "$index" -lt 1 ] || [ "$index" -gt "$count" ]; then
+        echo "Error: Invalid model index. Must be between 1 and $count"
+        exit 1
+    fi
+    
+    local model_name=$(get_model_name "$index")
+    
+    echo "═══════════════════════════════════════"
+    echo "  Delete Model Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo "  Model to delete: $index) $model_name"
+    echo ""
+    read -p "Are you sure? (y/N): " confirm
+    
+    case "$confirm" in
+        y|Y|yes|YES)
+            ;;
+        *)
+            echo "Cancelled."
+            exit 0
+            ;;
+    esac
+    
+    local temp_file="${CONFIG_FILE}.tmp"
+    local line_num=0
+    local in_target=0
+    local brace_count=0
+    local skipped=0
+    
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+        
+        if echo "$line" | grep -q '"name"'; then
+            local current_name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+            if [ "$current_name" = "$model_name" ]; then
+                in_target=1
+            fi
+        fi
+        
+        if [ $in_target -eq 1 ]; then
+            brace_count=$((brace_count + $(echo "$line" | grep -o '{' | wc -l)))
+            brace_count=$((brace_count - $(echo "$line" | grep -o '}' | wc -l)))
+            
+            if [ $brace_count -le 0 ]; then
+                in_target=0
+                skipped=1
+            fi
+            continue
+        fi
+        
+        echo "$line" >> "$temp_file"
+    done < "$CONFIG_FILE"
+    
+    if [ $skipped -eq 1 ]; then
+        local content=$(cat "$temp_file")
+        content=$(echo "$content" | sed 's/},\s*]/}/' | sed 's/,\s*,/,/g')
+        echo "$content" > "$temp_file"
+    fi
+    
+    mv "$temp_file" "$CONFIG_FILE"
+    
+    echo ""
+    echo "✓ Model '$model_name' deleted successfully!"
+    echo ""
+    echo "Remaining models:"
+    list_models
+}
+
 show_keys() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Error: Config file not found at $CONFIG_FILE"
@@ -534,13 +639,12 @@ show_keys() {
     echo "To add model: cc -a"
 }
 
-# Parse arguments
 skip_perm=false
 only_env=false
 model_index=""
 claude_args=()
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case $1 in
         -y|--bypass)
             skip_perm=true
@@ -558,6 +662,14 @@ while [[ $# -gt 0 ]]; do
             add_model
             exit 0
             ;;
+        -d|--delete)
+            if [ -z "$2" ]; then
+                echo "Error: --delete requires a model index"
+                exit 1
+            fi
+            delete_model "$2"
+            exit 0
+            ;;
         -s|--show-keys)
             show_keys
             exit 0
@@ -568,6 +680,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -c|--current)
             show_current
+            exit 0
+            ;;
+        -V|--version)
+            show_version
             exit 0
             ;;
         -h|--help)

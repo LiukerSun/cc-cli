@@ -6,8 +6,14 @@ param(
     [string]$Branch = "main"
 )
 
-# Version
-$VERSION = "1.0.0"
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
+if (Test-Path $VERSION_FILE) {
+    $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+} else {
+    $VERSION = "unknown"
+}
+
 $REPO_URL = "https://github.com/LiukerSun/cc-cli"
 
 # Installation paths
@@ -88,19 +94,29 @@ function Install-Script {
     $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
     Write-Host "Downloading from: $scriptUrl"
     
-    try {
-        $webClient = New-Object System.Net.WebClient
-        $webClient.Encoding = [System.Text.Encoding]::UTF8
-        $content = $webClient.DownloadString($scriptUrl)
+    $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
+    
+    if (Test-Path $localScript) {
+        Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
+        Write-Success "[OK] Installed cc.ps1 from local source"
+    } else {
+        $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
+        Write-Host "Downloading from: $scriptUrl"
         
-        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-        [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
-        
-        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
-    } catch {
-        Write-Error "[X] Failed to download script: $_"
-        Write-Host "Please download manually from: $scriptUrl"
-        exit 1
+        try {
+            $webClient = New-Object System.Net.WebClient
+            $webClient.Encoding = [System.Text.Encoding]::UTF8
+            $content = $webClient.DownloadString($scriptUrl)
+            
+            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
+            
+            Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+        } catch {
+            Write-Error "[X] Failed to download script: $_"
+            Write-Host "Please download manually from: $scriptUrl"
+            exit 1
+        }
     }
     
     Write-Host ""
