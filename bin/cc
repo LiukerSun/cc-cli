@@ -442,7 +442,11 @@ run_with_model() {
     
     # Source env file and execute claude
     source "$ENV_FILE"
-    exec claude "${claude_args[@]}"
+    if [ "$skip_perm" = "true" ]; then
+        exec claude --dangerously-skip-permissions "${claude_args[@]}"
+    else
+        exec claude "${claude_args[@]}"
+    fi
 }
 
 show_current() {
