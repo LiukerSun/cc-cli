@@ -6,17 +6,21 @@
 
 ### 修复
 - **配置文件损坏问题 (Issue #3)** - 修复运行 `cc -a` 时配置文件被破坏的问题
+  - Bash 版本 (bin/cc): 添加 `jq` 支持，改进纯 Bash 实现的 JSON 处理
+  - PowerShell 版本 (bin/cc.ps1): 添加 `ConvertTo-Hashtable` 函数，修复 PSCustomObject 序列化问题
   - 之前运行 `cc -a` 会导致现有模型配置消失，出现无效的 "value" 和 "Count" 字段
   - 现在正确保留所有现有配置，只追加新模型
 
 ### 改进
-- **JSON 处理增强** - 添加 `jq` 支持，提供更可靠的 JSON 操作（当系统安装 jq 时）
-- **回退机制优化** - 改进纯 Bash 实现的 JSON 追加逻辑，使用 `head` 替代 `sed` 操作
+- **JSON 处理增强 (Bash)** - 添加 `jq` 支持，提供更可靠的 JSON 操作（当系统安装 jq 时）
+- **回退机制优化 (Bash)** - 改进纯 Bash 实现的 JSON 追加逻辑，使用 `head` 替代 `sed` 操作
+- **PowerShell 对象转换** - 添加 `ConvertTo-Hashtable` 函数，正确处理 PSCustomObject 到哈希表的转换
 - **错误处理** - 添加配置备份和恢复机制，防止配置丢失
-- **兼容性** - 同时支持有 jq 和无 jq 的环境
+- **兼容性** - 同时支持有 jq 和无 jq 的环境（Bash）；跨平台支持（Windows/macOS/Linux）
 
 ### 变更
 - bin/cc - 重写 `save_model_config` 函数，修复配置损坏问题
+- bin/cc.ps1 - 添加 `ConvertTo-Hashtable` 函数，修复 `Save-ModelConfig` 函数
 
 ## [1.3.0] - 2025-03-04
 

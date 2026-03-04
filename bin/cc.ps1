@@ -416,6 +416,35 @@ function Add-ManualModel {
     Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
 }
 
+function ConvertTo-Hashtable {
+    param(
+        [Parameter(ValueFromPipeline)]
+        $InputObject
+    )
+    
+    if ($null -eq $InputObject) {
+        return $null
+    }
+    
+    if ($InputObject -is [System.Collections.IEnumerable] -and $InputObject -isnot [string]) {
+        $collection = @()
+        foreach ($object in $InputObject) {
+            $collection += ConvertTo-Hashtable -InputObject $object
+        }
+        return $collection
+    }
+    elseif ($InputObject -is [System.Management.Automation.PSCustomObject]) {
+        $hash = @{}
+        foreach ($property in $InputObject.PSObject.Properties) {
+            $hash[$property.Name] = ConvertTo-Hashtable -InputObject $property.Value
+        }
+        return $hash
+    }
+    else {
+        return $InputObject
+    }
+}
+
 function Save-ModelConfig {
     param(
         [string]$Name,
@@ -427,7 +456,8 @@ function Save-ModelConfig {
     
     $config = @()
     if (Test-Path $CONFIG_FILE) {
-        $config = @(Get-Content $CONFIG_FILE | ConvertFrom-Json)
+        $rawConfig = Get-Content $CONFIG_FILE | ConvertFrom-Json
+        $config = @(ConvertTo-Hashtable -InputObject $rawConfig)
     }
     
     $newModel = @{
