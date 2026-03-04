@@ -2,6 +2,24 @@
 
 本项目的所有重要变更都将记录在此文件中。
 
+## [1.3.0] - 2025-03-04
+
+### 新增
+- **--upgrade 命令** - 添加 `-U, --upgrade` 选项自动升级到最新版本
+- **版本检查** - 自动从 GitHub 检查最新版本
+- **智能版本比较** - 支持语义化版本号的比较算法
+
+### 功能
+- 自动下载并安装最新版本
+- 保留用户配置和 API keys
+- 跨平台支持（macOS/Linux/Windows）
+- 详细的升级进度提示
+
+### 变更
+- bin/cc - 添加 upgrade、check_latest_version、compare_versions 函数
+- bin/cc.ps1 - 添加 Upgrade-CC、Get-LatestVersion、Compare-Versions 函数
+- README.md - 添加升级功能文档和使用示例
+
 ## [1.2.0] - 2025-03-03
 
 ### 新增

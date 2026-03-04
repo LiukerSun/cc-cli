@@ -45,6 +45,7 @@ usage() {
     echo "  -a, --add       Add a new model configuration"
     echo "  -d, --delete N  Delete model #N"
     echo "  -s, --show      Show API keys (partially hidden)"
+    echo "  -U, --upgrade   Upgrade to latest version"
     echo "  -V, --version   Show version"
     echo "  -h, --help      Show this help message"
     echo ""
@@ -56,10 +57,137 @@ usage() {
     echo "  cc -a           Add a new model"
     echo "  cc -d 2         Delete model #2"
     echo "  cc -s           Show API keys"
+    echo "  cc -U           Upgrade to latest version"
 }
 
 show_version() {
     echo "cc version $CC_VERSION"
+}
+
+check_latest_version() {
+    local latest_version
+    latest_version=$(curl -fsSL "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION" 2>/dev/null | tr -d '[:space:]')
+    
+    if [ -z "$latest_version" ]; then
+        echo "Error: Failed to check latest version" >&2
+        return 1
+    fi
+    
+    echo "$latest_version"
+}
+
+compare_versions() {
+    local v1="$1"
+    local v2="$2"
+    
+    if [ "$v1" = "$v2" ]; then
+        echo "equal"
+        return 0
+    fi
+    
+    local IFS=.
+    local i ver1=($v1) ver2=($v2)
+    
+    for ((i=0; i<${#ver1[@]}; i++)); do
+        if [ -z "${ver2[i]}" ]; then
+            ver2[i]=0
+        fi
+        
+        if ((10#${ver1[i]} > 10#${ver2[i]})); then
+            echo "greater"
+            return 0
+        fi
+        
+        if ((10#${ver1[i]} < 10#${ver2[i]})); then
+            echo "less"
+            return 0
+        fi
+    done
+    
+    echo "less"
+}
+
+upgrade() {
+    echo "═══════════════════════════════════════"
+    echo "  CC-CLI Updater"
+    echo "═══════════════════════════════════════"
+    echo ""
+    
+    echo "Checking latest version..."
+    local latest_version
+    latest_version=$(check_latest_version)
+    
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+    
+    echo "Current version: $CC_VERSION"
+    echo "Latest version:  $latest_version"
+    echo ""
+    
+    local comparison
+    comparison=$(compare_versions "$CC_VERSION" "$latest_version")
+    
+    if [ "$comparison" = "equal" ]; then
+        echo "✓ Already running the latest version!"
+        exit 0
+    elif [ "$comparison" = "greater" ]; then
+        echo "⚠ You're running a newer version than the latest release"
+        exit 0
+    fi
+    
+    echo "Upgrading from $CC_VERSION to $latest_version..."
+    echo ""
+    
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    local script_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/bin/cc"
+    local version_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION"
+    
+    echo "Downloading latest version..."
+    
+    if ! curl -fsSL "$script_url" -o "$tmp_dir/cc" 2>/dev/null; then
+        echo "Error: Failed to download script" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    if ! curl -fsSL "$version_url" -o "$tmp_dir/VERSION" 2>/dev/null; then
+        echo "Error: Failed to download VERSION file" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    local install_dir="$HOME/.cc-cli"
+    local bin_dir="$HOME/bin"
+    
+    mkdir -p "$install_dir"
+    mkdir -p "$bin_dir"
+    
+    chmod +x "$tmp_dir/cc"
+    
+    if ! cp "$tmp_dir/cc" "$bin_dir/cc"; then
+        echo "Error: Failed to install script" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    if ! cp "$tmp_dir/VERSION" "$install_dir/VERSION"; then
+        echo "Error: Failed to install VERSION file" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    rm -rf "$tmp_dir"
+    
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  ✓ Upgrade Complete!"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo "Upgraded from $CC_VERSION to $latest_version"
+    echo ""
+    echo "Run 'cc --version' to verify the upgrade"
 }
 
 list_models() {
@@ -679,6 +807,10 @@ while [ $# -gt 0 ]; do
             ;;
         -c|--current)
             show_current
+            exit 0
+            ;;
+        -U|--upgrade)
+            upgrade
             exit 0
             ;;
         -V|--version)
