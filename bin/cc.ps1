@@ -35,6 +35,7 @@ function Show-Help {
     Write-Host "  -a, -add        Add a new model configuration"
     Write-Host "  -d, -delete N   Delete model #N"
     Write-Host "  -s, -show       Show API keys (partially hidden)"
+    Write-Host "  -U, -upgrade    Upgrade to latest version"
     Write-Host "  -V, -version    Show version"
     Write-Host "  -h, -help       Show this help message"
     Write-Host ""
@@ -45,10 +46,127 @@ function Show-Help {
     Write-Host "  cc -E           Edit configuration file"
     Write-Host "  cc -a           Add a new model"
     Write-Host "  cc -d 2         Delete model #2"
+    Write-Host "  cc -U           Upgrade to latest version"
 }
 
 function Show-Version {
     Write-Host "cc version $CC_VERSION"
+}
+
+function Get-LatestVersion {
+    try {
+        $url = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION"
+        $client = New-Object System.Net.WebClient
+        $version = $client.DownloadString($url).Trim()
+        return $version
+    } catch {
+        Write-Error "Failed to check latest version: $_"
+        return $null
+    }
+}
+
+function Compare-Versions {
+    param(
+        [string]$v1,
+        [string]$v2
+    )
+    
+    if ($v1 -eq $v2) {
+        return "equal"
+    }
+    
+    $ver1 = $v1 -split '\.'
+    $ver2 = $v2 -split '\.'
+    
+    $maxLen = [Math]::Max($ver1.Count, $ver2.Count)
+    
+    for ($i = 0; $i -lt $maxLen; $i++) {
+        $num1 = if ($i -lt $ver1.Count) { [int]$ver1[$i] } else { 0 }
+        $num2 = if ($i -lt $ver2.Count) { [int]$ver2[$i] } else { 0 }
+        
+        if ($num1 -gt $num2) {
+            return "greater"
+        }
+        if ($num1 -lt $num2) {
+            return "less"
+        }
+    }
+    
+    return "equal"
+}
+
+function Upgrade-CC {
+    Write-Host "==================================="
+    Write-Host "  CC-CLI Updater" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+    
+    Write-Host "Checking latest version..." -NoNewline
+    
+    $latestVersion = Get-LatestVersion
+    
+    if (-not $latestVersion) {
+        exit 1
+    }
+    
+    Write-Host " Done!"
+    Write-Host ""
+    Write-Host "Current version: $CC_VERSION"
+    Write-Host "Latest version:  $latestVersion"
+    Write-Host ""
+    
+    $comparison = Compare-Versions -v1 $CC_VERSION -v2 $latestVersion
+    
+    if ($comparison -eq "equal") {
+        Write-Host "[OK] Already running the latest version!" -ForegroundColor Green
+        exit 0
+    } elseif ($comparison -eq "greater") {
+        Write-Host "[!] You're running a newer version than the latest release" -ForegroundColor Yellow
+        exit 0
+    }
+    
+    Write-Host "Upgrading from $CC_VERSION to $latestVersion..." -ForegroundColor Cyan
+    Write-Host ""
+    
+    $scriptUrl = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/bin/cc.ps1"
+    $versionUrl = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION"
+    
+    $installDir = "$env:USERPROFILE\.cc-cli"
+    $scriptFile = "$env:USERPROFILE\bin\cc.ps1"
+    
+    Write-Host "Downloading latest version..." -NoNewline
+    
+    try {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Encoding = [System.Text.Encoding]::UTF8
+        
+        $scriptContent = $webClient.DownloadString($scriptUrl)
+        $versionContent = $webClient.DownloadString($versionUrl).Trim()
+        
+        Write-Host " Done!"
+        Write-Host ""
+        
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+        New-Item -ItemType Directory -Force -Path (Split-Path $scriptFile -Parent) | Out-Null
+        
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($scriptFile, $scriptContent, $utf8NoBom)
+        [System.IO.File]::WriteAllText("$installDir\VERSION", $versionContent, $utf8NoBom)
+        
+        Write-Host "==================================="
+        Write-Host "  [OK] Upgrade Complete!" -ForegroundColor Green
+        Write-Host "==================================="
+        Write-Host "Upgraded from $CC_VERSION to $latestVersion"
+        Write-Host ""
+        Write-Host "Run 'cc -V' to verify the upgrade"
+        
+    } catch {
+        Write-Host ""
+        Write-Error "Failed to upgrade: $_"
+        Write-Host "Please try manual upgrade:"
+        Write-Host "  irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex"
+        exit 1
+    }
 }
 
 function Get-Models {
@@ -586,6 +704,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
                 exit 0
             }
             { $_ -in "-s", "-show", "--show-keys" } { Show-Keys; exit 0 }
+            { $_ -in "-U", "-upgrade", "--upgrade" } { Upgrade-CC; exit 0 }
             { $_ -in "-V", "-version", "--version" } { Show-Version; exit 0 }
             { $_ -in "-h", "-help", "--help" } { Show-Help; exit 0 }
             "--" { $foundSeparator = $true }

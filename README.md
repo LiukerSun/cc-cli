@@ -174,6 +174,7 @@ Select fast model [1-N] (default: same as main): 3
 | `cc -a, --add` | 交互式添加新模型 |
 | `cc -d, --delete N` | 删除模型 #N |
 | `cc -s, --show-keys` | 查看 API keys（部分隐藏） |
+| `cc -U, --upgrade` | 升级到最新版本 |
 
 ### 模型选择
 | 命令 | 说明 |
@@ -186,6 +187,12 @@ Select fast model [1-N] (default: same as main): 3
 | 命令 | 说明 |
 |------|------|
 | `cc -e 2` | 仅设置环境变量，不启动 Claude |
+
+### 版本管理
+| 命令 | 说明 |
+|------|------|
+| `cc -V, --version` | 显示当前版本 |
+| `cc -U, --upgrade` | 升级到最新版本 |
 
 ## ⚙ 交互式选择
 
@@ -262,6 +269,21 @@ Select fast model [1-N] (default: same as main): 3
 ```
 
 ## 🔧 高级用法
+
+### 升级到最新版本
+
+```bash
+# 检查并升级到最新版本
+cc -U
+
+# 或
+cc --upgrade
+```
+
+升级功能会：
+- 自动检查 GitHub 上的最新版本
+- 如果有新版本，自动下载并安装
+- 保留你的配置文件和 API keys
 
 ### 自定义编辑器
 
