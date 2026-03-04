@@ -35,6 +35,7 @@ function Show-Help {
     Write-Host "  -a, -add        Add a new model configuration"
     Write-Host "  -d, -delete N   Delete model #N"
     Write-Host "  -s, -show       Show API keys (partially hidden)"
+    Write-Host "  -v, -validate   Validate and repair config file"
     Write-Host "  -U, -upgrade    Upgrade to latest version"
     Write-Host "  -V, -version    Show version"
     Write-Host "  -h, -help       Show this help message"
@@ -46,6 +47,7 @@ function Show-Help {
     Write-Host "  cc -E           Edit configuration file"
     Write-Host "  cc -a           Add a new model"
     Write-Host "  cc -d 2         Delete model #2"
+    Write-Host "  cc -v           Validate and repair config"
     Write-Host "  cc -U           Upgrade to latest version"
 }
 
@@ -169,13 +171,74 @@ function Upgrade-CC {
     }
 }
 
+function Test-ConfigValid {
+    param(
+        [object]$Config
+    )
+    
+    if (-not $Config) { return $false }
+    
+    $configArray = @($Config)
+    
+    foreach ($item in $configArray) {
+        if (-not $item.name) { return $false }
+        if (-not $item.env) { return $false }
+        if (-not $item.env.ANTHROPIC_BASE_URL) { return $false }
+        if (-not $item.env.ANTHROPIC_AUTH_TOKEN) { return $false }
+        if (-not $item.env.ANTHROPIC_MODEL) { return $false }
+        if (-not $item.env.ANTHROPIC_SMALL_FAST_MODEL) { return $false }
+    }
+    
+    return $true
+}
+
+function Repair-Config {
+    param(
+        [object]$Config
+    )
+    
+    $validModels = @()
+    $configArray = @($Config)
+    
+    foreach ($item in $configArray) {
+        if ($item.name -and $item.env -and 
+            $item.env.ANTHROPIC_BASE_URL -and 
+            $item.env.ANTHROPIC_AUTH_TOKEN -and 
+            $item.env.ANTHROPIC_MODEL) {
+            
+            if (-not $item.env.ANTHROPIC_SMALL_FAST_MODEL) {
+                $item.env.ANTHROPIC_SMALL_FAST_MODEL = $item.env.ANTHROPIC_MODEL
+            }
+            
+            $validModels += $item
+        }
+    }
+    
+    return $validModels
+}
+
 function Get-Models {
     if (-not (Test-Path $CONFIG_FILE)) {
         Write-Error "Config file not found: $CONFIG_FILE"
         exit 1
     }
     
-    $config = Get-Content $CONFIG_FILE | ConvertFrom-Json
+    try {
+        $rawContent = Get-Content $CONFIG_FILE -Raw
+        $config = $rawContent | ConvertFrom-Json
+    } catch {
+        Write-Error "Config file is not valid JSON: $_"
+        Write-Host "Please fix or delete: $CONFIG_FILE" -ForegroundColor Yellow
+        exit 1
+    }
+    
+    if (-not (Test-ConfigValid -Config $config)) {
+        Write-Host "[!] Config file has invalid entries, repairing..." -ForegroundColor Yellow
+        $config = Repair-Config -Config $config
+        Save-JsonNoBOM -Path $CONFIG_FILE -Object $config
+        Write-Host "[OK] Config file repaired" -ForegroundColor Green
+    }
+    
     return @($config)
 }
 
@@ -283,6 +346,104 @@ function Edit-Config {
     Write-Host ""
     
     & $editor $CONFIG_FILE
+}
+
+function Validate-Config {
+    Write-Host "==================================="
+    Write-Host "  Config File Validator" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+    Write-Host "File: $CONFIG_FILE"
+    Write-Host ""
+    
+    if (-not (Test-Path $CONFIG_FILE)) {
+        Write-Host "[!] Config file does not exist" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Creating empty config file..."
+        Save-JsonNoBOM -Path $CONFIG_FILE -Object @()
+        Write-Host "[OK] Empty config file created" -ForegroundColor Green
+        return
+    }
+    
+    try {
+        $rawContent = Get-Content $CONFIG_FILE -Raw
+        $config = $rawContent | ConvertFrom-Json
+    } catch {
+        Write-Host "[ERROR] Config file is not valid JSON" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Please fix manually: cc -E"
+        exit 1
+    }
+    
+    Write-Host "[OK] JSON syntax is valid" -ForegroundColor Green
+    
+    $configArray = @($config)
+    $validCount = 0
+    $invalidCount = 0
+    $errors = @()
+    
+    for ($i = 0; $i -lt $configArray.Count; $i++) {
+        $item = $configArray[$i]
+        $num = $i + 1
+        
+        if (-not $item.name) {
+            $errors += "Entry #$num : missing 'name' field"
+            $invalidCount++
+            continue
+        }
+        
+        if (-not $item.env) {
+            $errors += "Entry #$num ($($item.name)): missing 'env' field"
+            $invalidCount++
+            continue
+        }
+        
+        $missingFields = @()
+        if (-not $item.env.ANTHROPIC_BASE_URL) { $missingFields += "ANTHROPIC_BASE_URL" }
+        if (-not $item.env.ANTHROPIC_AUTH_TOKEN) { $missingFields += "ANTHROPIC_AUTH_TOKEN" }
+        if (-not $item.env.ANTHROPIC_MODEL) { $missingFields += "ANTHROPIC_MODEL" }
+        
+        if ($missingFields.Count -gt 0) {
+            $errors += "Entry #$num ($($item.name)): missing fields: $($missingFields -join ', ')"
+            $invalidCount++
+            continue
+        }
+        
+        $validCount++
+    }
+    
+    Write-Host ""
+    Write-Host "Valid entries:   $validCount" -ForegroundColor Green
+    Write-Host "Invalid entries: $invalidCount" -ForegroundColor $(if ($invalidCount -gt 0) { "Red" } else { "Green" })
+    
+    if ($errors.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Errors found:" -ForegroundColor Red
+        foreach ($err in $errors) {
+            Write-Host "  - $err" -ForegroundColor Red
+        }
+        
+        Write-Host ""
+        Write-Host "Repairing config file..." -ForegroundColor Yellow
+        $repaired = Repair-Config -Config $config
+        
+        if ($repaired.Count -lt $configArray.Count) {
+            Write-Host "[OK] Removed $($configArray.Count - $repaired.Count) invalid entries" -ForegroundColor Yellow
+        }
+        
+        Save-JsonNoBOM -Path $CONFIG_FILE -Object $repaired
+        Write-Host "[OK] Config file repaired" -ForegroundColor Green
+        
+        Write-Host ""
+        Write-Host "Remaining models:"
+        foreach ($item in $repaired) {
+            Write-Host "  - $($item.name)"
+        }
+    } else {
+        Write-Host ""
+        Write-Host "[OK] Config file is valid!" -ForegroundColor Green
+    }
 }
 
 function Add-Model {
@@ -457,7 +618,12 @@ function Save-ModelConfig {
     $config = @()
     if (Test-Path $CONFIG_FILE) {
         $rawConfig = Get-Content $CONFIG_FILE | ConvertFrom-Json
-        $config = @(ConvertTo-Hashtable -InputObject $rawConfig)
+        $allConfig = @(ConvertTo-Hashtable -InputObject $rawConfig)
+        foreach ($item in $allConfig) {
+            if ($item.name) {
+                $config += $item
+            }
+        }
     }
     
     $newModel = @{
@@ -734,6 +900,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
                 exit 0
             }
             { $_ -in "-s", "-show", "--show-keys" } { Show-Keys; exit 0 }
+            { $_ -in "-v", "-validate", "--validate" } { Validate-Config; exit 0 }
             { $_ -in "-U", "-upgrade", "--upgrade" } { Upgrade-CC; exit 0 }
             { $_ -in "-V", "-version", "--version" } { Show-Version; exit 0 }
             { $_ -in "-h", "-help", "--help" } { Show-Help; exit 0 }
