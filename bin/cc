@@ -603,7 +603,37 @@ save_model_config() {
     local main_model="$4"
     local fast_model="$5"
     
-    local new_entry=$(cat <<EOF
+    local temp_file="${CONFIG_FILE}.tmp.$$"
+    
+    if command -v jq &> /dev/null; then
+        local new_entry=$(cat <<EOF
+{
+  "name": "$model_name",
+  "env": {
+    "ANTHROPIC_BASE_URL": "$base_url",
+    "ANTHROPIC_AUTH_TOKEN": "$api_key",
+    "ANTHROPIC_MODEL": "$main_model",
+    "ANTHROPIC_SMALL_FAST_MODEL": "$fast_model"
+  }
+}
+EOF
+)
+        
+        if [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE" | tr -d '[:space:]')" = "[]" ]; then
+            echo "[$new_entry]" | jq '.' > "$temp_file"
+        else
+            jq ". += [$new_entry]" "$CONFIG_FILE" > "$temp_file"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            mv "$temp_file" "$CONFIG_FILE"
+        else
+            rm -f "$temp_file"
+            echo "Error: Failed to update configuration with jq" >&2
+            exit 1
+        fi
+    else
+        local new_entry=$(cat <<EOF
     {
         "name": "$model_name",
         "env": {
@@ -615,14 +645,28 @@ save_model_config() {
     }
 EOF
 )
-    
-    if [ $(wc -l < "$CONFIG_FILE") -eq 1 ]; then
-        echo "[$new_entry]" > "$CONFIG_FILE"
-    else
-        sed -i.bak '$ d' "$CONFIG_FILE"
-        echo "," >> "$CONFIG_FILE"
-        echo "$new_entry" >> "$CONFIG_FILE"
-        echo "]" >> "$CONFIG_FILE"
+        
+        if [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE" | tr -d '[:space:]')" = "[]" ]; then
+            echo "[$new_entry]" > "$CONFIG_FILE"
+        else
+            local backup="${CONFIG_FILE}.bak"
+            cp "$CONFIG_FILE" "$backup"
+            
+            head -n -1 "$CONFIG_FILE" > "$temp_file"
+            echo "," >> "$temp_file"
+            echo "$new_entry" >> "$temp_file"
+            echo "]" >> "$temp_file"
+            
+            if [ $? -eq 0 ] && [ -s "$temp_file" ]; then
+                mv "$temp_file" "$CONFIG_FILE"
+                rm -f "$backup"
+            else
+                mv "$backup" "$CONFIG_FILE"
+                rm -f "$temp_file"
+                echo "Error: Failed to update configuration" >&2
+                exit 1
+            fi
+        fi
     fi
     
     echo ""
