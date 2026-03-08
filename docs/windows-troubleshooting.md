@@ -113,19 +113,21 @@ cc --list
 ## 🐛 常见问题
 
 ### 问题 1: JSON 格式错误
-```
+
 错误示例（你的配置）：
+```json
 [
     {
-        "name":  "zhipu",  // ❌ 多余空格
-        "env":  {           // ❌ 多余空格
+        "name":  "zhipu",
+        "env":  {
 ```
 
 正确示例：
+```json
 [
     {
-        "name": "ZHIPU AI",  // ✅ 无多余空格
-        "env": {             // ✅ 正确格式
+        "name": "ZHIPU AI",
+        "env": {
 ```
 
 ### 问题 2: BOM 标记
