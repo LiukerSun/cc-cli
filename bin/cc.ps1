@@ -66,10 +66,9 @@ function Uninstall-CC {
     if (Test-Path $installScript) {
         & $installScript -Action uninstall @args
     } else {
-        Write-Error "Install script not found: $installScript"
-        Write-Host "Please run uninstall manually:"
-        Write-Host "  irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex -ArgumentList 'uninstall'"
-        exit 1
+        Write-Host "Install script not found, running from remote..."
+        Write-Host ""
+        irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex -ArgumentList 'uninstall'
     }
 }
 
