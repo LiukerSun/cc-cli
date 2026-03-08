@@ -103,6 +103,7 @@ function Install-Script {
     Write-Warning "Installing cc command (branch: $Branch)..."
     
     $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
+    $installScriptDest = "$INSTALL_DIR\install.ps1"
     
     if ($SCRIPT_DIR) {
         $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
@@ -112,6 +113,12 @@ function Install-Script {
             $localVersion = Join-Path $SCRIPT_DIR "VERSION"
             if (Test-Path $localVersion) {
                 Copy-Item -Path $localVersion -Destination "$INSTALL_DIR\VERSION" -Force
+            }
+            # Copy install.ps1 for uninstall support
+            $localInstallScript = Join-Path $SCRIPT_DIR "install.ps1"
+            if (Test-Path $localInstallScript) {
+                Copy-Item -Path $localInstallScript -Destination $installScriptDest -Force
+                Write-Success "[OK] Installed uninstall script to $installScriptDest"
             }
             Write-Success "[OK] Installed cc.ps1 from local source"
             Write-Host ""
@@ -130,6 +137,16 @@ function Install-Script {
         [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
         
         Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+        
+        # Download install.ps1 for uninstall support
+        $installScriptUrl = "$REPO_URL/raw/$Branch/install.ps1"
+        try {
+            $installScriptContent = $webClient.DownloadString($installScriptUrl)
+            [System.IO.File]::WriteAllText($installScriptDest, $installScriptContent, $utf8NoBom)
+            Write-Success "[OK] Downloaded uninstall script to $installScriptDest"
+        } catch {
+            Write-Warning "[!] Could not download install.ps1 file"
+        }
         
         $versionDest = "$INSTALL_DIR\VERSION"
         $versionUrl = "$REPO_URL/raw/$Branch/VERSION"

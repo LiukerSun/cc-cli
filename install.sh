@@ -73,14 +73,18 @@ install_script() {
     if [ -f "./bin/cc" ]; then
         # Local installation
         cp ./bin/cc "$BIN_DIR/cc"
+        cp ./install.sh "$INSTALL_DIR/install.sh"
     else
         # Remote installation
         curl -fsSL "$REPO_URL/raw/main/bin/cc" -o "$BIN_DIR/cc"
+        curl -fsSL "$REPO_URL/raw/main/install.sh" -o "$INSTALL_DIR/install.sh"
     fi
     
     chmod +x "$BIN_DIR/cc"
+    chmod +x "$INSTALL_DIR/install.sh"
     
     echo -e "${GREEN}✓ Installed cc to $BIN_DIR/cc${NC}"
+    echo -e "${GREEN}✓ Installed uninstall script to $INSTALL_DIR/install.sh${NC}"
     echo ""
 }
 
