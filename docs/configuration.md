@@ -111,7 +111,38 @@ vim ~/.cc-config.json
         "ANTHROPIC_MODEL": "kimi-k2.5",
         "ANTHROPIC_SMALL_FAST_MODEL": "kimi-k2-thinking"
     }
+},
+{
+    "name": "阿里云百炼 (Coding Plan)",
+    "env": {
+        "ANTHROPIC_BASE_URL": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+        "ANTHROPIC_AUTH_TOKEN": "your-dashscope-api-key",
+        "ANTHROPIC_MODEL": "qwen3.5-plus",
+        "ANTHROPIC_SMALL_FAST_MODEL": "qwen3-coder-plus"
+    }
 }
+```
+
+### 阿里云百炼 Coding Plan
+
+阿里云百炼 Coding Plan 提供最新最强的编程模型，兼容 Anthropic API 协议。
+
+**可用模型：**
+| 品牌 | 模型 | 能力 |
+|------|------|------|
+| 千问 | qwen3.5-plus | 文本生成、深度思考、视觉理解 |
+| 千问 | qwen3-max-2026-01-23 | 文本生成、深度思考 |
+| 千问 | qwen3-coder-next | 文本生成 |
+| 千问 | qwen3-coder-plus | 文本生成 |
+| 智谱 | glm-5 | 文本生成、深度思考 |
+| 智谱 | glm-4.7 | 文本生成、深度思考 |
+| Kimi | kimi-k2.5 | 文本生成、深度思考、视觉理解 |
+| MiniMax | minimax-m2.5 | 文本生成、深度思考 |
+
+**配置方式：**
+```bash
+cc -a
+# 选择 2) Alibaba Coding Plan (百炼) - auto fetch models
 ```
 
 ## API Key 安全

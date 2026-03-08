@@ -2,6 +2,21 @@
 
 本项目的所有重要变更都将记录在此文件中。
 
+## [1.4.0] - 2026-03-09
+
+### 新增
+- **阿里云百炼 Coding Plan 支持** - 添加阿里云百炼 Coding Plan 模型配置，兼容 Anthropic API 协议
+  - 添加 `add_alibaba_coding_plan` / `Add-AlibabaCodingPlan` 函数
+  - 支持自动从百炼 API 获取模型列表
+  - 支持预定义模型列表作为回退（当 API 不可用时）
+  - 支持的模型包括：qwen3.5-plus、qwen3-max、qwen3-coder 系列、glm-5、glm-4.7、kimi-k2.5、minimax-m2.5
+  - API 端点：`https://coding.dashscope.aliyuncs.com/apps/anthropic`
+
+### 变更
+- bin/cc - 添加 provider 选项 2) Alibaba Coding Plan
+- bin/cc.ps1 - 添加 Add-AlibabaCodingPlan 函数
+- 更新交互提示，支持 3 个 provider 选项
+
 ## [1.3.4] - 2026-03-08
 
 ### 新增
