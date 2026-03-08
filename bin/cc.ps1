@@ -461,7 +461,7 @@ function Add-Model {
     Write-Host ""
     Write-Host "Select provider:"
     Write-Host "  1) ZHIPU AI - auto fetch models"
-    Write-Host "  2) Alibaba Coding Plan (百炼) - auto fetch models"
+    Write-Host "  2) Alibaba Coding Plan - auto fetch models"
     Write-Host "  3) Manual input"
     Write-Host ""
 
@@ -545,7 +545,7 @@ function Add-ZhipuModel {
 function Add-AlibabaCodingPlan {
     Write-Host ""
     Write-Host "==================================="
-    Write-Host "  Alibaba Coding Plan (百炼) Configuration" -ForegroundColor Cyan
+    Write-Host "  Alibaba Coding Plan Configuration" -ForegroundColor Cyan
     Write-Host "==================================="
     Write-Host ""
 
