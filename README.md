@@ -125,9 +125,10 @@ cc -E    # 用 vim 打开配置文件
 cc -a    # 交互式添加新模型
 ```
 
-支持两种添加方式：
-1. **厂商自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
-2. **手动输入** - 手动填写所有配置信息
+支持三种添加方式：
+1. **ZHIPU AI 自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
+2. **Alibaba Coding Plan (百炼)** - 选择阿里云百炼，输入 API Key，自动获取编程模型列表
+3. **手动输入** - 手动填写所有配置信息
 
 #### ZHIPU AI 快速配置示例
 
@@ -135,9 +136,10 @@ cc -a    # 交互式添加新模型
 $ cc -a
 Select provider:
   1) ZHIPU AI (智谱) - auto fetch models
-  2) Manual input
+  2) Alibaba Coding Plan (百炼) - auto fetch models
+  3) Manual input
 
-Choice [1-2]: 1
+Choice [1-3]: 1
 
 API Key: your-zhipu-api-key
 
@@ -153,7 +155,39 @@ Available Models:
 Select main model [1-N]: 2
 Select fast model [1-N] (default: same as main): 3
 
-✓ Model 'ZHIPU (GLM-4-Air)' added successfully!
+Model 'ZHIPU (GLM-4-Air)' added successfully!
+```
+
+#### Alibaba Coding Plan (百炼) 快速配置示例
+
+```bash
+$ cc -a
+Select provider:
+  1) ZHIPU AI (智谱) - auto fetch models
+  2) Alibaba Coding Plan (百炼) - auto fetch models
+  3) Manual input
+
+Choice [1-3]: 2
+
+API Key: your-dashscope-api-key
+
+Fetching models from Alibaba Coding Plan... Done!
+
+Available Models:
+
+   1) qwen3.5-plus
+   2) qwen3-max-2026-01-23
+   3) qwen3-coder-next
+   4) qwen3-coder-plus
+   5) glm-5
+   6) glm-4.7
+   7) kimi-k2.5
+   8) minimax-m2.5
+
+Select main model [1-8]: 1
+Select fast model [1-8] (default: same as main): 4
+
+Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 ```
 
 ## 📖 命令参考
