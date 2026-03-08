@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LiukerSun/cc-cli/stars">
-    <img src="https://img.shields.io/github/stars/LiukerSun/cc-cli.svg?style=social" alt="GitHub stars">
+  <a href="https://github.com/LiukerSun/cc-cli/stargazers">
+    <img src="https://img.shields.io/github/stars/LiukerSun/cc-cli.svg" alt="GitHub stars">
   </a>
   <a href="https://github.com/LiukerSun/cc-cli/issues">
-    <img src="https://img.shields.io/github/issues/LiukerSun/cc-cli.svg?style=social" alt="GitHub issues">
+    <img src="https://img.shields.io/github/issues/LiukerSun/cc-cli.svg" alt="GitHub issues">
   </a>
   <a href="https://github.com/LiukerSun/cc-cli/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/LiukerSun/cc-cli.svg?style=social" alt="License">
+    <img src="https://img.shields.io/github/license/LiukerSun/cc-cli.svg" alt="License">
   </a>
 </p>
 
@@ -34,10 +34,29 @@
 
 ## 📦 安装
 
-### 快速安装（推荐）
+### macOS / Linux (Bash)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+# 以管理员身份运行 PowerShell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# 一键安装
+irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
+```
+
+或者手动安装：
+```powershell
+# 下载安装脚本
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 -OutFile install.ps1
+
+# 运行安装
+.\install.ps1
 ```
 
 ### 手动安装
@@ -47,20 +66,28 @@ curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | 
 git clone https://github.com/LiukerSun/cc-cli.git
 cd cc-cli
 
-# 运行安装脚本
+# macOS/Linux
 ./install.sh
+
+# Windows
+.\install.ps1
 ```
 
 ### 验证安装
 
 ```bash
+# macOS/Linux
 cc --version
 cc --help
+
+# Windows PowerShell
+cc -Version
+cc -Help
 ```
 
 ## 🚀 快速开始
 
-### 埥看所有模型
+### 查看所有模型
 
 ```bash
 cc --list
@@ -98,7 +125,38 @@ cc -E    # 用 vim 打开配置文件
 cc -a    # 交互式添加新模型
 ```
 
-## 📖 匇令参考
+支持两种添加方式：
+1. **厂商自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
+2. **手动输入** - 手动填写所有配置信息
+
+#### ZHIPU AI 快速配置示例
+
+```bash
+$ cc -a
+Select provider:
+  1) ZHIPU AI (智谱) - auto fetch models
+  2) Manual input
+
+Choice [1-2]: 1
+
+API Key: your-zhipu-api-key
+
+Fetching models from ZHIPU AI... Done!
+
+Available Models:
+
+   1) GLM-4-0520
+   2) GLM-4-Air
+   3) GLM-4-AirX
+   ...
+
+Select main model [1-N]: 2
+Select fast model [1-N] (default: same as main): 3
+
+✓ Model 'ZHIPU (GLM-4-Air)' added successfully!
+```
+
+## 📖 命令参考
 
 ### 基础命令
 | 命令 | 说明 |
@@ -106,6 +164,7 @@ cc -a    # 交互式添加新模型
 | `cc` | 交互式选择模型并启动 Claude |
 | `cc -l, --list` | 列出所有可用模型 |
 | `cc -c, --current` | 显示当前使用的模型 |
+| `cc -V, --version` | 显示版本号 |
 | `cc -h, --help` | 显示帮助信息 |
 
 ### 配置管理
@@ -113,7 +172,9 @@ cc -a    # 交互式添加新模型
 |------|------|
 | `cc -E, --edit` | 编辑配置文件 |
 | `cc -a, --add` | 交互式添加新模型 |
+| `cc -d, --delete N` | 删除模型 #N |
 | `cc -s, --show-keys` | 查看 API keys（部分隐藏） |
+| `cc -U, --upgrade` | 升级到最新版本 |
 
 ### 模型选择
 | 命令 | 说明 |
@@ -126,6 +187,12 @@ cc -a    # 交互式添加新模型
 | 命令 | 说明 |
 |------|------|
 | `cc -e 2` | 仅设置环境变量，不启动 Claude |
+
+### 版本管理
+| 命令 | 说明 |
+|------|------|
+| `cc -V, --version` | 显示当前版本 |
+| `cc -U, --upgrade` | 升级到最新版本 |
 
 ## ⚙ 交互式选择
 
@@ -202,6 +269,40 @@ cc -a    # 交互式添加新模型
 ```
 
 ## 🔧 高级用法
+
+### Team Subagent 模型配置
+
+当你使用 Claude Code 的 team 功能时，subagent 会自动使用你在 `cc` 脚本中选择的模型。
+
+```bash
+# 选择模型后启动 Claude
+cc 1  # 选择 qwen3.5-plus
+
+# 在 Claude Code 中创建 team
+/team 创建团队任务
+```
+
+此时创建的 subagent 会使用 `qwen3.5-plus` 模型，而不是默认的 `haiku` 或 `claude-opus-4-6`。
+
+**工作原理：**
+- `cc` 脚本会自动更新 `~/.claude/settings.json` 文件
+- 将当前模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 写入配置
+- Claude Code 启动时读取这些环境变量，subagent 也会继承
+
+### 升级到最新版本
+
+```bash
+# 检查并升级到最新版本
+cc -U
+
+# 或
+cc --upgrade
+```
+
+升级功能会：
+- 自动检查 GitHub 上的最新版本
+- 如果有新版本，自动下载并安装
+- 保留你的配置文件和 API keys
 
 ### 自定义编辑器
 
@@ -289,3 +390,4 @@ claude
 <div align="center">
   Made with ❤️ by the community
 </div>
+

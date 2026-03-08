@@ -1,6 +1,6 @@
-# 贴 Contrib指南
+# 贡献指南
 
-感谢你考虑为 CC-CLI 巷贡献！
+感谢你考虑为 CC-CLI 做出贡献！
 
 ## 开发环境设置
 
@@ -34,7 +34,7 @@ git commit -m "Your changes"
 - 添加注释解释复杂逻辑
 - 保持函数简短和专注
 
-## 提交 Bug 択
+## 提交 Bug 报告
 
 请在提交 Issue 之前，请搜索现有的 issues。
 
