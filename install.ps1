@@ -1,0 +1,312 @@
+# CC-CLI PowerShell Installation Script
+# https://github.com/LiukerSun/cc-cli
+
+param(
+    [string]$Action = "install",
+    [string]$Branch = "main"
+)
+
+$scriptPath = $MyInvocation.MyCommand.Path
+$REPO_URL = "https://github.com/LiukerSun/cc-cli"
+
+if ($scriptPath) {
+    $SCRIPT_DIR = Split-Path -Parent $scriptPath
+    $VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
+    if (Test-Path $VERSION_FILE) {
+        $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+    } else {
+        $VERSION = "unknown"
+    }
+} else {
+    $SCRIPT_DIR = $null
+    try {
+        $versionUrl = "$REPO_URL/raw/$Branch/VERSION"
+        $VERSION = (New-Object System.Net.WebClient).DownloadString($versionUrl).Trim()
+    } catch {
+        $VERSION = "unknown"
+    }
+}
+
+# Installation paths
+$INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
+$CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
+$SCRIPT_FILE = "$env:USERPROFILE\bin\cc.ps1"
+
+# Colors
+function Write-ColorOutput($ForegroundColor) {
+    $fc = $host.UI.RawUI.ForegroundColor
+    $host.UI.RawUI.ForegroundColor = $ForegroundColor
+    if ($args) {
+        Write-Output $args
+    }
+    $host.UI.RawUI.ForegroundColor = $fc
+}
+
+function Write-Success { Write-ColorOutput Green $args }
+function Write-Info { Write-ColorOutput Cyan $args }
+function Write-Warning { Write-ColorOutput Yellow $args }
+function Write-Error { Write-ColorOutput Red $args }
+
+# Helper function to save UTF-8 without BOM
+function Save-FileNoBOM {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+    
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
+# Banner
+Write-Info "==================================="
+Write-Info "  CC-CLI Installer v$VERSION (PowerShell)"
+Write-Info "==================================="
+Write-Host ""
+
+# Check requirements
+function Check-Requirements {
+    Write-Warning "Checking system requirements..."
+    
+    # Check PowerShell version
+    if ($PSVersionTable.PSVersion.Major -lt 5) {
+        Write-Error "[X] PowerShell 5.0 or later is required"
+        exit 1
+    }
+    Write-Success "[OK] PowerShell $($PSVersionTable.PSVersion) found"
+    
+    # Check for claude command
+    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+        Write-Warning "[!] Claude CLI not found (optional)"
+        Write-Host "  Install from: https://claude.ai"
+    } else {
+        Write-Success "[OK] Claude CLI found"
+    }
+    
+    Write-Host ""
+}
+
+# Create directories
+function Create-Directories {
+    Write-Warning "Creating directories..."
+    
+    New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
+    New-Item -ItemType Directory -Force -Path (Split-Path $SCRIPT_FILE -Parent) | Out-Null
+    
+    Write-Success "[OK] Created $INSTALL_DIR"
+    Write-Success "[OK] Created $(Split-Path $SCRIPT_FILE -Parent)"
+    Write-Host ""
+}
+
+# Download main script
+function Install-Script {
+    Write-Warning "Installing cc command (branch: $Branch)..."
+    
+    $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
+    
+    if ($SCRIPT_DIR) {
+        $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
+        
+        if (Test-Path $localScript) {
+            Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
+            $localVersion = Join-Path $SCRIPT_DIR "VERSION"
+            if (Test-Path $localVersion) {
+                Copy-Item -Path $localVersion -Destination "$INSTALL_DIR\VERSION" -Force
+            }
+            Write-Success "[OK] Installed cc.ps1 from local source"
+            Write-Host ""
+            return
+        }
+    }
+    
+    Write-Host "Downloading from: $scriptUrl"
+    
+    try {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Encoding = [System.Text.Encoding]::UTF8
+        $content = $webClient.DownloadString($scriptUrl)
+        
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
+        
+        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+        
+        $versionDest = "$INSTALL_DIR\VERSION"
+        $versionUrl = "$REPO_URL/raw/$Branch/VERSION"
+        try {
+            $versionContent = $webClient.DownloadString($versionUrl).Trim()
+            [System.IO.File]::WriteAllText($versionDest, $versionContent, $utf8NoBom)
+            Write-Success "[OK] Downloaded VERSION to $versionDest"
+        } catch {
+            Write-Warning "[!] Could not download VERSION file"
+        }
+    } catch {
+        Write-Error "[X] Failed to download script: $_"
+        Write-Host "Please download manually from: $scriptUrl"
+        exit 1
+    }
+    
+    Write-Host ""
+}
+
+# Create default config
+function Create-Config {
+    if (-not (Test-Path $CONFIG_FILE)) {
+        Write-Warning "Creating default configuration..."
+        
+        $defaultConfig = @(
+            "{",
+            '    "name": "Claude (Official)",',
+            '    "env": {',
+            '        "ANTHROPIC_BASE_URL": "https://api.anthropic.com",',
+            '        "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",',
+            '        "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",',
+            '        "ANTHROPIC_SMALL_FAST_MODEL": "claude-haiku-4-5-20251001"',
+            "    }",
+            "}"
+        ) -join "`n"
+        
+        Save-FileNoBOM -Path $CONFIG_FILE -Content "[$defaultConfig]"
+        Write-Success "[OK] Created config file: $CONFIG_FILE"
+        Write-Warning "  Please edit this file to add your API keys"
+    } else {
+        Write-Success "[OK] Config file already exists: $CONFIG_FILE"
+    }
+    Write-Host ""
+}
+
+# Add to PATH
+function Add-ToPath {
+    Write-Warning "Configuring PATH..."
+    
+    $binDir = Split-Path $SCRIPT_FILE -Parent
+    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    
+    if ($currentPath -notlike "*$binDir*") {
+        [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$binDir", "User")
+        Write-Success "[OK] Added $binDir to PATH"
+        Write-Warning "  Please restart your terminal or run: `$env:PATH += `";$binDir`""
+    } else {
+        Write-Success "[OK] Already in PATH"
+    }
+    Write-Host ""
+}
+
+# Create wrapper function
+function Create-Wrapper {
+    Write-Warning "Creating PowerShell wrapper..."
+    
+    $wrapperContent = @'
+# CC-CLI PowerShell Wrapper
+function cc {
+    & "$env:USERPROFILE\bin\cc.ps1" @args
+}
+'@
+    
+    $profileDir = Split-Path $PROFILE -Parent
+    if (-not (Test-Path $profileDir)) {
+        New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
+    }
+    
+    # Remove old wrapper if exists
+    if (Test-Path $PROFILE) {
+        $profileContent = Get-Content $PROFILE -Raw
+        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function cc \{.*?\}'
+        $profileContent = $profileContent -replace $pattern, ''
+        $profileContent = $profileContent.TrimEnd()
+        
+        # Save cleaned profile
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($PROFILE, $profileContent, $utf8NoBom)
+    }
+    
+    # Add new wrapper
+    Add-Content -Path $PROFILE -Value "`n`n$wrapperContent"
+    Write-Success "[OK] Added cc function to PowerShell profile"
+    Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
+    Write-Host ""
+}
+
+# Print success message
+function Print-Success {
+    Write-Success "==================================="
+    Write-Success "  Installation Complete!"
+    Write-Success "==================================="
+    Write-Host ""
+    
+    Write-Info "Next steps:"
+    Write-Host ""
+    Write-Host "  1. " -NoNewline
+    Write-Warning "Add your API keys:"
+    Write-Host "     " -NoNewline
+    Write-Info "cc -E"
+    Write-Host ""
+    Write-Host "  2. " -NoNewline
+    Write-Warning "Restart PowerShell or run:"
+    Write-Host "     " -NoNewline
+    Write-Info ". `$PROFILE"
+    Write-Host ""
+    Write-Host "  3. " -NoNewline
+    Write-Warning "Start using cc:"
+    Write-Host "     " -NoNewline
+    Write-Info "cc              # Interactive selection"
+    Write-Host "     " -NoNewline
+    Write-Info "cc --list       # List all models"
+    Write-Host "     " -NoNewline
+    Write-Info "cc --help       # Show help"
+    Write-Host ""
+    Write-Info "Documentation:"
+    Write-Host "  $REPO_URL"
+    Write-Host ""
+    Write-Info "Configuration file:"
+    Write-Host "  $CONFIG_FILE"
+    Write-Host ""
+}
+
+# Uninstall function
+function Uninstall {
+    Write-Warning "Uninstalling cc-cli..."
+    
+    if (Test-Path $SCRIPT_FILE) {
+        Remove-Item $SCRIPT_FILE -Force
+    }
+    if (Test-Path $INSTALL_DIR) {
+        Remove-Item $INSTALL_DIR -Recurse -Force
+    }
+    
+    Write-Success "[OK] Uninstalled cc-cli"
+    Write-Warning "  Config file preserved: $CONFIG_FILE"
+    Write-Warning "  Remove manually if needed: Remove-Item `"$CONFIG_FILE`""
+    exit 0
+}
+
+# Main
+switch ($Action.ToLower()) {
+    "uninstall" { Uninstall }
+    "help" {
+        Write-Host "Usage: .\install.ps1 [-Branch <name>] [ACTION]"
+        Write-Host ""
+        Write-Host "Actions:"
+        Write-Host "  install     Install cc-cli (default)"
+        Write-Host "  uninstall   Remove cc-cli"
+        Write-Host "  help        Show this help message"
+        Write-Host ""
+        Write-Host "Options:"
+        Write-Host "  -Branch     Specify branch to install (default: main)"
+        Write-Host ""
+        Write-Host "Examples:"
+        Write-Host "  .\install.ps1"
+        Write-Host "  .\install.ps1 -Branch feature/auto-fetch-zhipu-models"
+        Write-Host "  .\install.ps1 -Action uninstall"
+        exit 0
+    }
+    default {
+        Check-Requirements
+        Create-Directories
+        Install-Script
+        Create-Config
+        Add-ToPath
+        Create-Wrapper
+        Print-Success
+    }
+}

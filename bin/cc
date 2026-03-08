@@ -1,12 +1,35 @@
 #!/bin/bash
 
+VERSION_FILE="$HOME/.cc-cli/VERSION"
+if [ -f "$VERSION_FILE" ]; then
+    CC_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+else
+    CC_VERSION="unknown"
+fi
+
+detect_platform() {
+    case "$(uname -s)" in
+        Darwin*)    echo "macos" ;;
+        Linux*)     echo "linux" ;;
+        MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
+        *)          echo "unknown" ;;
+    esac
+}
+
+PLATFORM=$(detect_platform)
 CONFIG_FILE="$HOME/.cc-config.json"
 ENV_FILE="/tmp/cc-model-env.sh"
+CLAUDE_SETTINGS_FILE="$HOME/.claude/settings.json"
 
-# Terminal control
+# Terminal control (cross-platform)
 hide_cursor() { printf "\033[?25l"; }
 show_cursor() { printf "\033[?25h"; }
-clear_screen() { printf "\033[2J\033[H"; }
+clear_screen() { 
+    case "$PLATFORM" in
+        windows) printf "\033[2J\033[H" ;;
+        *) printf "\033[2J\033[H" ;;
+    esac
+}
 move_cursor() { printf "\033[$1;$2H"; }
 
 usage() {
@@ -21,8 +44,14 @@ usage() {
     echo "  -c, --current   Show current model"
     echo "  -E, --edit      Edit configuration file"
     echo "  -a, --add       Add a new model configuration"
+    echo "  -d, --delete N  Delete model #N"
     echo "  -s, --show      Show API keys (partially hidden)"
+    echo "  -U, --upgrade   Upgrade to latest version"
+    echo "  -V, --version   Show version"
     echo "  -h, --help      Show this help message"
+    echo ""
+    echo "Note: This command also updates ~/.claude/settings.json with the selected"
+    echo "      model to ensure team subagents use the same model configuration."
     echo ""
     echo "Examples:"
     echo "  cc              Interactive model selection (use arrow keys)"
@@ -30,7 +59,139 @@ usage() {
     echo "  cc -y 3         Start Claude with model #3 and bypass permissions"
     echo "  cc -E           Edit configuration file"
     echo "  cc -a           Add a new model"
+    echo "  cc -d 2         Delete model #2"
     echo "  cc -s           Show API keys"
+    echo "  cc -U           Upgrade to latest version"
+}
+
+show_version() {
+    echo "cc version $CC_VERSION"
+}
+
+check_latest_version() {
+    local latest_version
+    latest_version=$(curl -fsSL "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION" 2>/dev/null | tr -d '[:space:]')
+    
+    if [ -z "$latest_version" ]; then
+        echo "Error: Failed to check latest version" >&2
+        return 1
+    fi
+    
+    echo "$latest_version"
+}
+
+compare_versions() {
+    local v1="$1"
+    local v2="$2"
+    
+    if [ "$v1" = "$v2" ]; then
+        echo "equal"
+        return 0
+    fi
+    
+    local IFS=.
+    local i ver1=($v1) ver2=($v2)
+    
+    for ((i=0; i<${#ver1[@]}; i++)); do
+        if [ -z "${ver2[i]}" ]; then
+            ver2[i]=0
+        fi
+        
+        if ((10#${ver1[i]} > 10#${ver2[i]})); then
+            echo "greater"
+            return 0
+        fi
+        
+        if ((10#${ver1[i]} < 10#${ver2[i]})); then
+            echo "less"
+            return 0
+        fi
+    done
+    
+    echo "less"
+}
+
+upgrade() {
+    echo "═══════════════════════════════════════"
+    echo "  CC-CLI Updater"
+    echo "═══════════════════════════════════════"
+    echo ""
+    
+    echo "Checking latest version..."
+    local latest_version
+    latest_version=$(check_latest_version)
+    
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+    
+    echo "Current version: $CC_VERSION"
+    echo "Latest version:  $latest_version"
+    echo ""
+    
+    local comparison
+    comparison=$(compare_versions "$CC_VERSION" "$latest_version")
+    
+    if [ "$comparison" = "equal" ]; then
+        echo "✓ Already running the latest version!"
+        exit 0
+    elif [ "$comparison" = "greater" ]; then
+        echo "⚠ You're running a newer version than the latest release"
+        exit 0
+    fi
+    
+    echo "Upgrading from $CC_VERSION to $latest_version..."
+    echo ""
+    
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    local script_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/bin/cc"
+    local version_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION"
+    
+    echo "Downloading latest version..."
+    
+    if ! curl -fsSL "$script_url" -o "$tmp_dir/cc" 2>/dev/null; then
+        echo "Error: Failed to download script" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    if ! curl -fsSL "$version_url" -o "$tmp_dir/VERSION" 2>/dev/null; then
+        echo "Error: Failed to download VERSION file" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    local install_dir="$HOME/.cc-cli"
+    local bin_dir="$HOME/bin"
+    
+    mkdir -p "$install_dir"
+    mkdir -p "$bin_dir"
+    
+    chmod +x "$tmp_dir/cc"
+    
+    if ! cp "$tmp_dir/cc" "$bin_dir/cc"; then
+        echo "Error: Failed to install script" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    if ! cp "$tmp_dir/VERSION" "$install_dir/VERSION"; then
+        echo "Error: Failed to install VERSION file" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    rm -rf "$tmp_dir"
+    
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  ✓ Upgrade Complete!"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo "Upgraded from $CC_VERSION to $latest_version"
+    echo ""
+    echo "Run 'cc --version' to verify the upgrade"
 }
 
 list_models() {
@@ -113,8 +274,14 @@ select_interactive() {
     
     local count=${#models[@]}
     if [ $count -eq 0 ]; then
-        echo "No models found" >&2
-        exit 1
+        echo "═══════════════════════════════════════"
+        echo "  No Models Configured"
+        echo "═══════════════════════════════════════"
+        echo ""
+        echo "Please add a model first:"
+        echo "  cc -a        Add a new model"
+        echo ""
+        exit 0
     fi
     
     local current_model=""
@@ -196,7 +363,7 @@ get_model_name() {
 
 get_env_vars() {
     local model_index=$1
-    
+
     # Extract env vars for selected model using awk
     local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
     local env_block=$(awk -v start="$start_line" '
@@ -204,7 +371,7 @@ get_env_vars() {
         in_env && /}/ { print; exit }
         in_env { print }
     ' "$CONFIG_FILE")
-    
+
     # Output export statements
     echo "$env_block" | grep -E '^\s*"[A-Z_]+":' | while read -r line; do
         key=$(echo "$line" | sed 's/.*"\([A-Z_]*\)":.*/\1/')
@@ -213,17 +380,35 @@ get_env_vars() {
     done
 }
 
+get_model_env_value() {
+    local model_index=$1
+    local key_name=$2
+
+    local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
+    local value=$(awk -v start="$start_line" -v key="$key_name" '
+        NR >= start && /"env"/ { in_env=1 }
+        in_env && $0 ~ "\"" key "\":" {
+            gsub(/.*": *"/, "");
+            gsub(/".*/, "");
+            print;
+            exit
+        }
+        in_env && /}/ { exit }
+    ' "$CONFIG_FILE")
+
+    echo "$value"
+}
+
 run_with_model() {
     local model_index=$1
     local skip_perm=$2
     local only_env=$3
     shift 3
     local claude_args=("$@")
-    
+
     local count=$(get_model_count)
-    
+
     if [ -z "$model_index" ]; then
-        # Interactive selection with arrow keys
         trap 'show_cursor' EXIT
         local selection=$(select_interactive)
         if [ -z "$selection" ]; then
@@ -232,48 +417,75 @@ run_with_model() {
         model_index=$selection
         trap - EXIT
     fi
-    
-    if ! [[ "$model_index" =~ ^[0-9]+$ ]] || [ "$model_index" -lt 1 ] || [ "$model_index" -gt "$count" ]; then
+
+    case "$model_index" in
+        ''|*[!0-9]*)
+            echo "Error: Invalid model index. Must be between 1 and $count"
+            exit 1
+            ;;
+    esac
+
+    if [ "$model_index" -lt 1 ] || [ "$model_index" -gt "$count" ]; then
         echo "Error: Invalid model index. Must be between 1 and $count"
         exit 1
     fi
-    
+
     local model_name=$(get_model_name "$model_index")
-    
+    local main_model=$(get_model_env_value "$model_index" "ANTHROPIC_MODEL")
+    local fast_model=$(get_model_env_value "$model_index" "ANTHROPIC_SMALL_FAST_MODEL")
+
+    # Default fast model to main model if not set
+    if [ -z "$fast_model" ]; then
+        fast_model="$main_model"
+    fi
+
     echo "✓ Using model: $model_name"
-    
+
     if [ "$skip_perm" = "true" ]; then
         printf "✓ \033[0;33mBypass permissions enabled\033[0m\n"
     fi
-    
+
     echo "───────────────────────────────────────"
-    
+
+    # Update Claude settings for team subagent support
+    update_claude_settings "$main_model" "$fast_model"
+    echo "✓ Updated Claude settings (for team subagent)"
+
     # Build environment variables
     local env_vars=$(get_env_vars "$model_index")
-    
+
     # Create env file for reference
     echo "# Generated by cc command" > "$ENV_FILE"
     echo "# Model: $model_name" >> "$ENV_FILE"
-    
+
     while IFS= read -r env_line; do
         [ -z "$env_line" ] && continue
         echo "export $env_line" >> "$ENV_FILE"
     done <<< "$env_vars"
-    
+
     if [ "$skip_perm" = "true" ]; then
         echo "export CLAUDE_SKIP_PERMISSIONS=1" >> "$ENV_FILE"
     fi
-    
+
+    # Add CLAUDE_CODE_MODEL environment variables for subagent support
+    echo "export CLAUDE_CODE_MODEL=\"$main_model\"" >> "$ENV_FILE"
+    echo "export CLAUDE_CODE_SMALL_MODEL=\"$fast_model\"" >> "$ENV_FILE"
+    echo "export CLAUDE_CODE_SUBAGENT_MODEL=\"$main_model\"" >> "$ENV_FILE"
+
     if [ "$only_env" = "true" ]; then
         echo ""
         echo "Environment variables saved to: $ENV_FILE"
         echo "Run: source $ENV_FILE"
         exit 0
     fi
-    
+
     # Source env file and execute claude
     source "$ENV_FILE"
-    exec claude "${claude_args[@]}"
+    if [ "$skip_perm" = "true" ]; then
+        exec claude --dangerously-skip-permissions "${claude_args[@]}"
+    else
+        exec claude "${claude_args[@]}"
+    fi
 }
 
 show_current() {
@@ -309,6 +521,103 @@ add_model() {
     echo "  Add New Model Configuration"
     echo "═══════════════════════════════════════"
     echo ""
+    echo "Select provider:"
+    echo "  1) ZHIPU AI - auto fetch models"
+    echo "  2) Manual input"
+    echo ""
+    read -p "Choice [1-2]: " provider_choice
+    
+    if [ "$provider_choice" = "1" ]; then
+        add_zhipu_model
+    elif [ "$provider_choice" = "2" ]; then
+        add_manual_model
+    else
+        echo "Error: Invalid choice"
+        exit 1
+    fi
+}
+
+add_zhipu_model() {
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  ZHIPU AI Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+    read -p "API Key: " api_key
+    [ -z "$api_key" ] && echo "Error: API Key is required" && exit 1
+    
+    echo ""
+    printf "Fetching models from ZHIPU AI"
+    
+    local models_url="https://open.bigmodel.cn/api/paas/v4/models"
+    local response
+    response=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $api_key" "$models_url" 2>/dev/null)
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" != "200" ]; then
+        echo ""
+        echo "Error: Failed to fetch models (HTTP $http_code)"
+        echo "Response: $body"
+        exit 1
+    fi
+    
+    echo " Done!"
+    echo ""
+    
+    local model_list
+    model_list=$(echo "$body" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"$//' | sort)
+    
+    if [ -z "$model_list" ]; then
+        echo "Error: No models found in response"
+        exit 1
+    fi
+    
+    local models=()
+    while IFS= read -r model; do
+        models+=("$model")
+    done <<< "$model_list"
+    
+    local count=${#models[@]}
+    
+    echo "Available Models:"
+    echo ""
+    local i=1
+    for model in "${models[@]}"; do
+        printf "  %2d) %s\n" "$i" "$model"
+        ((i++))
+    done
+    echo ""
+    
+    read -p "Select main model [1-$count]: " main_idx
+    if ! [[ "$main_idx" =~ ^[0-9]+$ ]] || [ "$main_idx" -lt 1 ] || [ "$main_idx" -gt "$count" ]; then
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+    local main_model="${models[$main_idx-1]}"
+    
+    read -p "Select fast model [1-$count] (default: same as main): " fast_idx
+    local fast_model
+    if [ -z "$fast_idx" ]; then
+        fast_model="$main_model"
+    elif [[ "$fast_idx" =~ ^[0-9]+$ ]] && [ "$fast_idx" -ge 1 ] && [ "$fast_idx" -le "$count" ]; then
+        fast_model="${models[$fast_idx-1]}"
+    else
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+    
+    local model_name="ZHIPU ($main_model)"
+    
+    save_model_config "$model_name" "https://open.bigmodel.cn/api/anthropic" "$api_key" "$main_model" "$fast_model"
+}
+
+add_manual_model() {
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  Manual Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
     
     read -p "Model name (e.g., 'GPT-4'): " model_name
     [ -z "$model_name" ] && echo "Error: Name is required" && exit 1
@@ -327,8 +636,47 @@ add_model() {
     read -p "Fast Model (optional, press Enter to use main model): " fast_model
     [ -z "$fast_model" ] && fast_model="$main_model"
     
-    # Create new entry
-    local new_entry=$(cat <<EOF
+    save_model_config "$model_name" "$base_url" "$api_key" "$main_model" "$fast_model"
+}
+
+save_model_config() {
+    local model_name="$1"
+    local base_url="$2"
+    local api_key="$3"
+    local main_model="$4"
+    local fast_model="$5"
+    
+    local temp_file="${CONFIG_FILE}.tmp.$$"
+    
+    if command -v jq &> /dev/null; then
+        local new_entry=$(cat <<EOF
+{
+  "name": "$model_name",
+  "env": {
+    "ANTHROPIC_BASE_URL": "$base_url",
+    "ANTHROPIC_AUTH_TOKEN": "$api_key",
+    "ANTHROPIC_MODEL": "$main_model",
+    "ANTHROPIC_SMALL_FAST_MODEL": "$fast_model"
+  }
+}
+EOF
+)
+        
+        if [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE" | tr -d '[:space:]')" = "[]" ]; then
+            echo "[$new_entry]" | jq '.' > "$temp_file"
+        else
+            jq ". += [$new_entry]" "$CONFIG_FILE" > "$temp_file"
+        fi
+        
+        if [ $? -eq 0 ]; then
+            mv "$temp_file" "$CONFIG_FILE"
+        else
+            rm -f "$temp_file"
+            echo "Error: Failed to update configuration with jq" >&2
+            exit 1
+        fi
+    else
+        local new_entry=$(cat <<EOF
     {
         "name": "$model_name",
         "env": {
@@ -340,18 +688,28 @@ add_model() {
     }
 EOF
 )
-    
-    # Add to config file
-    if [ $(wc -l < "$CONFIG_FILE") -eq 1 ]; then
-        # Empty array, just add the entry
-        echo "[$new_entry]" > "$CONFIG_FILE"
-    else
-        # Append to existing array
-        # Remove last ], add comma, append entry, add ]
-        sed -i.bak '$ d' "$CONFIG_FILE"
-        echo "," >> "$CONFIG_FILE"
-        echo "$new_entry" >> "$CONFIG_FILE"
-        echo "]" >> "$CONFIG_FILE"
+        
+        if [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE" | tr -d '[:space:]')" = "[]" ]; then
+            echo "[$new_entry]" > "$CONFIG_FILE"
+        else
+            local backup="${CONFIG_FILE}.bak"
+            cp "$CONFIG_FILE" "$backup"
+            
+            head -n -1 "$CONFIG_FILE" > "$temp_file"
+            echo "," >> "$temp_file"
+            echo "$new_entry" >> "$temp_file"
+            echo "]" >> "$temp_file"
+            
+            if [ $? -eq 0 ] && [ -s "$temp_file" ]; then
+                mv "$temp_file" "$CONFIG_FILE"
+                rm -f "$backup"
+            else
+                mv "$backup" "$CONFIG_FILE"
+                rm -f "$temp_file"
+                echo "Error: Failed to update configuration" >&2
+                exit 1
+            fi
+        fi
     fi
     
     echo ""
@@ -360,32 +718,118 @@ EOF
     echo "Configuration saved to: $CONFIG_FILE"
 }
 
-show_keys() {
+delete_model() {
+    local index=$1
+    
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Error: Config file not found at $CONFIG_FILE"
         exit 1
     fi
     
+    local count=$(get_model_count)
+    
+    case "$index" in
+        ''|*[!0-9]*)
+            echo "Error: Invalid model index. Must be a number."
+            exit 1
+            ;;
+    esac
+    
+    if [ "$index" -lt 1 ] || [ "$index" -gt "$count" ]; then
+        echo "Error: Invalid model index. Must be between 1 and $count"
+        exit 1
+    fi
+    
+    local model_name=$(get_model_name "$index")
+    
+    echo "═══════════════════════════════════════"
+    echo "  Delete Model Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo "  Model to delete: $index) $model_name"
+    echo ""
+    read -p "Are you sure? (y/N): " confirm
+    
+    case "$confirm" in
+        y|Y|yes|YES)
+            ;;
+        *)
+            echo "Cancelled."
+            exit 0
+            ;;
+    esac
+    
+    local temp_file="${CONFIG_FILE}.tmp"
+    local line_num=0
+    local in_target=0
+    local brace_count=0
+    local skipped=0
+    
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+        
+        if echo "$line" | grep -q '"name"'; then
+            local current_name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+            if [ "$current_name" = "$model_name" ]; then
+                in_target=1
+            fi
+        fi
+        
+        if [ $in_target -eq 1 ]; then
+            brace_count=$((brace_count + $(echo "$line" | grep -o '{' | wc -l)))
+            brace_count=$((brace_count - $(echo "$line" | grep -o '}' | wc -l)))
+            
+            if [ $brace_count -le 0 ]; then
+                in_target=0
+                skipped=1
+            fi
+            continue
+        fi
+        
+        echo "$line" >> "$temp_file"
+    done < "$CONFIG_FILE"
+    
+    if [ $skipped -eq 1 ]; then
+        local content=$(cat "$temp_file")
+        content=$(echo "$content" | sed 's/},\s*]/}/' | sed 's/,\s*,/,/g')
+        echo "$content" > "$temp_file"
+    fi
+    
+    mv "$temp_file" "$CONFIG_FILE"
+    
+    echo ""
+    echo "✓ Model '$model_name' deleted successfully!"
+    echo ""
+    echo "Remaining models:"
+    list_models
+}
+
+show_keys() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Error: Config file not found at $CONFIG_FILE"
+        exit 1
+    fi
+
     echo "═══════════════════════════════════════"
     echo "  API Keys Overview"
     echo "═══════════════════════════════════════"
     echo ""
-    
+
     local index=1
     local in_env=0
     local current_name=""
     local current_url=""
     local current_key=""
-    
+
     while IFS= read -r line; do
         if echo "$line" | grep -q '"name"'; then
             current_name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
         fi
-        
+
         if echo "$line" | grep -q '"ANTHROPIC_BASE_URL"'; then
             current_url=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
         fi
-        
+
         if echo "$line" | grep -q '"ANTHROPIC_AUTH_TOKEN"'; then
             current_key=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
             # Mask the key (show first 8 and last 4 chars)
@@ -395,27 +839,91 @@ show_keys() {
             else
                 local masked_key="${current_key:0:4}***"
             fi
-            
+
             printf "%d) \033[1;36m%s\033[0m\n" "$index" "$current_name"
             printf "   URL: %s\n" "$current_url"
             printf "   Key: \033[0;90m%s\033[0m\n\n" "$masked_key"
             ((index++))
         fi
     done < "$CONFIG_FILE"
-    
+
     echo "───────────────────────────────────────"
     echo ""
     echo "To edit keys: cc -E"
     echo "To add model: cc -a"
 }
 
-# Parse arguments
+update_claude_settings() {
+    local main_model="$1"
+    local fast_model="$2"
+
+    # Create .claude directory if it doesn't exist
+    mkdir -p "$HOME/.claude"
+
+    local settings_temp="${CLAUDE_SETTINGS_FILE}.tmp"
+
+    if command -v jq &> /dev/null; then
+        # Use jq if available
+        if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
+            # Update existing settings
+            # Disable built-in subagents (Explore uses hard-coded Haiku which may not be supported)
+            # Set model field to override default model for all agents including subagents
+            jq --arg main "$main_model" --arg fast "$fast_model" '
+                .env = (.env // {}) |
+                .env.ANTHROPIC_MODEL = $main |
+                .env.ANTHROPIC_SMALL_FAST_MODEL = $fast |
+                .env.CLAUDE_CODE_MODEL = $main |
+                .env.CLAUDE_CODE_SMALL_MODEL = $fast |
+                .env.CLAUDE_CODE_SUBAGENT_MODEL = $main |
+                .model = $main |
+                .permissions = (.permissions // {}) |
+                .permissions.deny = ((.permissions.deny // []) + ["Agent(Explore)"] | unique)
+            ' "$CLAUDE_SETTINGS_FILE" > "$settings_temp" 2>/dev/null
+
+            if [ $? -eq 0 ]; then
+                mv "$settings_temp" "$CLAUDE_SETTINGS_FILE"
+            else
+                rm -f "$settings_temp"
+                # If jq failed, create new settings
+                create_default_settings "$main_model" "$fast_model"
+            fi
+        else
+            # Create new settings
+            create_default_settings "$main_model" "$fast_model"
+        fi
+    else
+        # Fallback without jq
+        create_default_settings "$main_model" "$fast_model"
+    fi
+}
+
+create_default_settings() {
+    local main_model="$1"
+    local fast_model="$2"
+
+    cat > "$CLAUDE_SETTINGS_FILE" <<EOF
+{
+  "env": {
+    "ANTHROPIC_MODEL": "$main_model",
+    "ANTHROPIC_SMALL_FAST_MODEL": "$fast_model",
+    "CLAUDE_CODE_MODEL": "$main_model",
+    "CLAUDE_CODE_SMALL_MODEL": "$fast_model",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "$main_model"
+  },
+  "model": "$main_model",
+  "permissions": {
+    "deny": ["Agent(Explore)"]
+  }
+}
+EOF
+}
+
 skip_perm=false
 only_env=false
 model_index=""
 claude_args=()
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case $1 in
         -y|--bypass)
             skip_perm=true
@@ -433,6 +941,14 @@ while [[ $# -gt 0 ]]; do
             add_model
             exit 0
             ;;
+        -d|--delete)
+            if [ -z "$2" ]; then
+                echo "Error: --delete requires a model index"
+                exit 1
+            fi
+            delete_model "$2"
+            exit 0
+            ;;
         -s|--show-keys)
             show_keys
             exit 0
@@ -443,6 +959,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -c|--current)
             show_current
+            exit 0
+            ;;
+        -U|--upgrade)
+            upgrade
+            exit 0
+            ;;
+        -V|--version)
+            show_version
             exit 0
             ;;
         -h|--help)

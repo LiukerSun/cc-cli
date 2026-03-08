@@ -26,9 +26,9 @@ CC-CLI 的配置文件位于 `~/.cc-config.json`
 
 - `name` - 模型的显示名称（必填）
 - `env.ANTHROPIC_BASE_URL` - API 端点 URL（必填）
-- `env.aNTHROPIC_AUTH_TOKEN` - API 密钥（必填）
-- `env.aNTHROPIC_MODEL` - 主模型 ID（必填）
-- `env.aNTHROPIC_SMALL_FAST_MODEL` - 快速模型 ID（可选，默认与主模型相同)
+- `env.ANTHROPIC_AUTH_TOKEN` - API 密钥（必填）
+- `env.ANTHROPIC_MODEL` - 主模型 ID（必填）
+- `env.ANTHROPIC_SMALL_FAST_MODEL` - 快速模型 ID（可选，默认与主模型相同)
 
 ## 添加新模型
 
@@ -77,7 +77,7 @@ vim ~/.cc-config.json
 }
 ```
 
-### OpenAI 兩点
+### OpenAI 端点
 
 ```json
 {
@@ -147,7 +147,7 @@ cc --add
 
 ### 权限问题
 ```bash
-# 磀保安装目录权限
+# 确保安装目录权限
 chmod 755 ~/.cc-cli
 chmod +x ~/bin/cc
 ```
@@ -161,3 +161,41 @@ chmod +x ~/bin/cc
 - 可以添加任意兼容 Anthropic API 的端点
 - 可以配置多个同一提供商的不同模型
 - 支持 custom headers（通过环境变量）
+
+## Team Subagent 模型配置
+
+当你使用 Claude Code 的 team 功能时，subagent 默认会使用硬编码的模型（如 `haiku` 或 `claude-opus-4-6`）。
+
+从 v1.3.3 开始，`cc` 脚本会在启动时自动更新 `~/.claude/settings.json` 文件，将当前选择的模型配置写入其中，这样 team subagent 也会使用相同的模型。
+
+### 工作原理
+
+1. 当你运行 `cc [模型索引]` 时
+2. 脚本会读取该模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 配置
+3. 自动更新 `~/.claude/settings.json` 的 `env` 字段
+4. Claude Code 启动时会读取这些环境变量，subagent 也会继承
+
+### 示例
+
+运行以下命令后：
+```bash
+cc 1  # 选择阿里百炼 qwen3.5-plus
+```
+
+`~/.claude/settings.json` 会被更新为：
+```json
+{
+  "env": {
+    "ANTHROPIC_MODEL": "qwen3.5-plus",
+    "ANTHROPIC_SMALL_FAST_MODEL": "qwen3.5-plus",
+    ...
+  },
+  ...
+}
+```
+
+### 注意事项
+
+- 如果你手动编辑了 `~/.claude/settings.json`，下次运行 `cc` 时会被覆盖
+- 如果需要在不同项目中使用不同模型，可以在项目根目录创建 `.claude/settings.local.json`
+- 此功能需要 `jq` 命令支持（macOS 和 Linux 默认已安装）
