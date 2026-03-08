@@ -78,7 +78,7 @@ uninstall_cc() {
     else
         echo "Install script not found, running from remote..."
         echo ""
-        curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | bash -s -- --uninstall
+        curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | bash -s -- --uninstall "$@"
     fi
 }
 

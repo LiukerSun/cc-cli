@@ -68,7 +68,8 @@ function Uninstall-CC {
     } else {
         Write-Host "Install script not found, running from remote..."
         Write-Host ""
-        irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex -ArgumentList 'uninstall'
+        $url = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1"
+        Invoke-Expression (irm $url) -ArgumentList @('-Action', 'uninstall')
     }
 }
 
