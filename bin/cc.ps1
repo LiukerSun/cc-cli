@@ -69,7 +69,15 @@ function Uninstall-CC {
         Write-Host "Install script not found, running from remote..."
         Write-Host ""
         $url = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1"
-        Invoke-Expression (irm $url) -ArgumentList @('-Action', 'uninstall')
+        $tempScript = [System.IO.Path]::GetTempFileName() + ".ps1"
+        try {
+            irm $url -OutFile $tempScript
+            & $tempScript -Action uninstall @args
+        } finally {
+            if (Test-Path $tempScript) {
+                Remove-Item $tempScript -Force
+            }
+        }
     }
 }
 
