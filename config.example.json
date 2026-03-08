@@ -1,0 +1,29 @@
+[
+    {
+        "name": "Claude (Official)",
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+            "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",
+            "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
+            "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-5-haiku-20241022"
+        }
+    },
+    {
+        "name": "OpenAI GPT-4",
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://api.openai.com/v1",
+            "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",
+            "ANTHROPIC_MODEL": "gpt-4o",
+            "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4o-mini"
+        }
+    },
+    {
+        "name": "ZHIPU AI",
+        "env": {
+            "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+            "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",
+            "ANTHROPIC_MODEL": "glm-4.7",
+            "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.0"
+        }
+    }
+]

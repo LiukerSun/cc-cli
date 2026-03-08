@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(cat:*)",
+      "Read(//Users/evansun/.claude/**)",
+      "Bash(bash:*)",
+      "Bash(/Users/evansun/Project/cc-cli/bin/cc:*)",
+      "Bash(jq:*)",
+      "Bash(git checkout:*)",
+      "Bash(rm:*)",
+      "Bash(git commit:*)",
+      "Bash(env:*)",
+      "Bash(git add:*)",
+      "Bash(cc:*)",
+      "Bash(curl:*)",
+      "Bash(./tests/test.sh:*)",
+      "Bash(git:*)"
+    ]
+  }
+}

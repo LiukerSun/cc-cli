@@ -1,0 +1,469 @@
+#!/bin/bash
+
+CONFIG_FILE="$HOME/.cc-config.json"
+ENV_FILE="/tmp/cc-model-env.sh"
+
+# Terminal control
+hide_cursor() { printf "\033[?25l"; }
+show_cursor() { printf "\033[?25h"; }
+clear_screen() { printf "\033[2J\033[H"; }
+move_cursor() { printf "\033[$1;$2H"; }
+
+usage() {
+    echo "Usage: cc [OPTIONS] [MODEL_INDEX] [-- CLAUDE_ARGS...]"
+    echo ""
+    echo "Start Claude with selected model configuration."
+    echo ""
+    echo "Options:"
+    echo "  -y, --bypass    Enable bypass permissions (CLAUDE_SKIP_PERMISSIONS=1)"
+    echo "  -e, --env       Only set environment variables (don't start Claude)"
+    echo "  -l, --list      List all available models"
+    echo "  -c, --current   Show current model"
+    echo "  -E, --edit      Edit configuration file"
+    echo "  -a, --add       Add a new model configuration"
+    echo "  -s, --show      Show API keys (partially hidden)"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  cc              Interactive model selection (use arrow keys)"
+    echo "  cc 2            Start Claude with model #2"
+    echo "  cc -y 3         Start Claude with model #3 and bypass permissions"
+    echo "  cc -E           Edit configuration file"
+    echo "  cc -a           Add a new model"
+    echo "  cc -s           Show API keys"
+}
+
+list_models() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Error: Config file not found at $CONFIG_FILE"
+        exit 1
+    fi
+    
+    local current_model=""
+    if [ -f "$ENV_FILE" ]; then
+        current_model=$(grep "^# Model:" "$ENV_FILE" | sed 's/# Model: //')
+    fi
+    
+    echo "═══════════════════════════════════════"
+    echo "  Available AI Models"
+    echo "═══════════════════════════════════════"
+    echo ""
+    
+    local index=1
+    while IFS= read -r line; do
+        name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+        if [ "$name" = "$current_model" ]; then
+            printf "  \033[0;32m➜ %d) %s \033[0m\033[0;90m(current)\033[0m\n" "$index" "$name"
+        else
+            printf "    %d) %s\n" "$index" "$name"
+        fi
+        ((index++))
+    done < <(grep '"name"' "$CONFIG_FILE")
+    echo ""
+    echo "───────────────────────────────────────"
+}
+
+get_models_array() {
+    grep '"name"' "$CONFIG_FILE" | sed 's/.*"name": *"\([^"]*\)".*/\1/'
+}
+
+draw_menu() {
+    local selected=$1
+    local current_model=$2
+    local models=("${@:3}")
+    local count=${#models[@]}
+    
+    clear_screen >&2
+    hide_cursor >&2
+    
+    echo "═══════════════════════════════════════" >&2
+    echo "  Available AI Models" >&2
+    echo "═══════════════════════════════════════" >&2
+    echo "" >&2
+    
+    local i=1
+    for model in "${models[@]}"; do
+        if [ $i -eq $selected ]; then
+            if [ "$model" = "$current_model" ]; then
+                printf "  \033[44m\033[1;37m➜ %d) %-25s\033[0m \033[0;90m(current)\033[0m\n" "$i" "$model" >&2
+            else
+                printf "  \033[44m\033[1;37m➜ %d) %-25s\033[0m\n" "$i" "$model" >&2
+            fi
+        else
+            if [ "$model" = "$current_model" ]; then
+                printf "  \033[0;32m➜ %d) %-25s\033[0m \033[0;90m(current)\033[0m\n" "$i" "$model" >&2
+            else
+                printf "    %d) %s\n" "$i" "$model" >&2
+            fi
+        fi
+        ((i++))
+    done
+    
+    echo "" >&2
+    echo "───────────────────────────────────────" >&2
+    echo "" >&2
+    printf "\033[0;90m  ↑↓ Navigate  •  Enter Select  •  q Exit\033[0m" >&2
+}
+
+select_interactive() {
+    local models=()
+    while IFS= read -r line; do
+        models+=("$line")
+    done < <(get_models_array)
+    
+    local count=${#models[@]}
+    if [ $count -eq 0 ]; then
+        echo "No models found" >&2
+        exit 1
+    fi
+    
+    local current_model=""
+    if [ -f "$ENV_FILE" ]; then
+        current_model=$(grep "^# Model:" "$ENV_FILE" | sed 's/# Model: //')
+    fi
+    
+    # Default selection: current model or first
+    local selected=1
+    if [ -n "$current_model" ]; then
+        for i in "${!models[@]}"; do
+            if [ "${models[$i]}" = "$current_model" ]; then
+                selected=$((i + 1))
+                break
+            fi
+        done
+    fi
+    
+    draw_menu $selected "$current_model" "${models[@]}"
+    
+    # Read keyboard input
+    while true; do
+        read -rsn1 key
+        case "$key" in
+            $'\x1b')
+                # Try to read arrow key sequence (compatible with bash 3.2)
+                read -rsn1 -t 1 bracket
+                read -rsn1 -t 1 letter
+                case "$bracket$letter" in
+                    '[A')  # Up arrow
+                        ((selected--))
+                        [ $selected -lt 1 ] && selected=$count
+                        draw_menu $selected "$current_model" "${models[@]}"
+                        ;;
+                    '[B')  # Down arrow
+                        ((selected++))
+                        [ $selected -gt $count ] && selected=1
+                        draw_menu $selected "$current_model" "${models[@]}"
+                        ;;
+                    '')
+                        # ESC pressed (no additional characters)
+                        echo "" >&2
+                        show_cursor >&2
+                        exit 1
+                        ;;
+                esac
+                ;;
+            '')  # Enter
+                echo "" >&2
+                show_cursor >&2
+                echo "" >&2
+                printf "✓ Using model: \033[1;36m%s\033[0m\n" "${models[$selected-1]}" >&2
+                echo $selected
+                return 0
+                ;;
+            q|Q)
+                echo "" >&2
+                show_cursor >&2
+                exit 1
+                ;;
+            [1-9])
+                if [ $key -le $count ]; then
+                    selected=$key
+                    draw_menu $selected "$current_model" "${models[@]}"
+                fi
+                ;;
+        esac
+    done
+}
+
+get_model_count() {
+    grep -c '"name"' "$CONFIG_FILE"
+}
+
+get_model_name() {
+    local index=$1
+    sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | sed -n "${index}p"
+}
+
+get_env_vars() {
+    local model_index=$1
+    
+    # Extract env vars for selected model using awk
+    local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
+    local env_block=$(awk -v start="$start_line" '
+        NR >= start && /"env"/ { in_env=1 }
+        in_env && /}/ { print; exit }
+        in_env { print }
+    ' "$CONFIG_FILE")
+    
+    # Output export statements
+    echo "$env_block" | grep -E '^\s*"[A-Z_]+":' | while read -r line; do
+        key=$(echo "$line" | sed 's/.*"\([A-Z_]*\)":.*/\1/')
+        value=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
+        echo "$key=\"$value\""
+    done
+}
+
+run_with_model() {
+    local model_index=$1
+    local skip_perm=$2
+    local only_env=$3
+    shift 3
+    local claude_args=("$@")
+    
+    local count=$(get_model_count)
+    
+    if [ -z "$model_index" ]; then
+        # Interactive selection with arrow keys
+        trap 'show_cursor' EXIT
+        local selection=$(select_interactive)
+        if [ -z "$selection" ]; then
+            exit 1
+        fi
+        model_index=$selection
+        trap - EXIT
+    fi
+    
+    if ! [[ "$model_index" =~ ^[0-9]+$ ]] || [ "$model_index" -lt 1 ] || [ "$model_index" -gt "$count" ]; then
+        echo "Error: Invalid model index. Must be between 1 and $count"
+        exit 1
+    fi
+    
+    local model_name=$(get_model_name "$model_index")
+    
+    echo "✓ Using model: $model_name"
+    
+    if [ "$skip_perm" = "true" ]; then
+        printf "✓ \033[0;33mBypass permissions enabled\033[0m\n"
+    fi
+    
+    echo "───────────────────────────────────────"
+    
+    # Build environment variables
+    local env_vars=$(get_env_vars "$model_index")
+    
+    # Create env file for reference
+    echo "# Generated by cc command" > "$ENV_FILE"
+    echo "# Model: $model_name" >> "$ENV_FILE"
+    
+    while IFS= read -r env_line; do
+        [ -z "$env_line" ] && continue
+        echo "export $env_line" >> "$ENV_FILE"
+    done <<< "$env_vars"
+    
+    if [ "$skip_perm" = "true" ]; then
+        echo "export CLAUDE_SKIP_PERMISSIONS=1" >> "$ENV_FILE"
+    fi
+    
+    if [ "$only_env" = "true" ]; then
+        echo ""
+        echo "Environment variables saved to: $ENV_FILE"
+        echo "Run: source $ENV_FILE"
+        exit 0
+    fi
+    
+    # Source env file and execute claude
+    source "$ENV_FILE"
+    exec claude "${claude_args[@]}"
+}
+
+show_current() {
+    if [ -f "$ENV_FILE" ]; then
+        grep "^# Model:" "$ENV_FILE" | sed 's/# Model: /Current model: /'
+        if grep -q "CLAUDE_SKIP_PERMISSIONS" "$ENV_FILE"; then
+            echo "Bypass permissions: enabled"
+        fi
+    else
+        echo "No model currently selected in this session"
+    fi
+}
+
+edit_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Error: Config file not found at $CONFIG_FILE"
+        exit 1
+    fi
+    
+    local editor="${EDITOR:-vim}"
+    echo "Opening config file with $editor..."
+    echo "File: $CONFIG_FILE"
+    echo ""
+    $editor "$CONFIG_FILE"
+}
+
+add_model() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "[]" > "$CONFIG_FILE"
+    fi
+    
+    echo "═══════════════════════════════════════"
+    echo "  Add New Model Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+    
+    read -p "Model name (e.g., 'GPT-4'): " model_name
+    [ -z "$model_name" ] && echo "Error: Name is required" && exit 1
+    
+    echo ""
+    echo "API Configuration:"
+    read -p "API Base URL: " base_url
+    [ -z "$base_url" ] && echo "Error: Base URL is required" && exit 1
+    
+    read -p "API Key: " api_key
+    [ -z "$api_key" ] && echo "Error: API Key is required" && exit 1
+    
+    read -p "Main Model (e.g., 'gpt-4'): " main_model
+    [ -z "$main_model" ] && echo "Error: Model name is required" && exit 1
+    
+    read -p "Fast Model (optional, press Enter to use main model): " fast_model
+    [ -z "$fast_model" ] && fast_model="$main_model"
+    
+    # Create new entry
+    local new_entry=$(cat <<EOF
+    {
+        "name": "$model_name",
+        "env": {
+            "ANTHROPIC_BASE_URL": "$base_url",
+            "ANTHROPIC_AUTH_TOKEN": "$api_key",
+            "ANTHROPIC_MODEL": "$main_model",
+            "ANTHROPIC_SMALL_FAST_MODEL": "$fast_model"
+        }
+    }
+EOF
+)
+    
+    # Add to config file
+    if [ $(wc -l < "$CONFIG_FILE") -eq 1 ]; then
+        # Empty array, just add the entry
+        echo "[$new_entry]" > "$CONFIG_FILE"
+    else
+        # Append to existing array
+        # Remove last ], add comma, append entry, add ]
+        sed -i.bak '$ d' "$CONFIG_FILE"
+        echo "," >> "$CONFIG_FILE"
+        echo "$new_entry" >> "$CONFIG_FILE"
+        echo "]" >> "$CONFIG_FILE"
+    fi
+    
+    echo ""
+    echo "✓ Model '$model_name' added successfully!"
+    echo ""
+    echo "Configuration saved to: $CONFIG_FILE"
+}
+
+show_keys() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Error: Config file not found at $CONFIG_FILE"
+        exit 1
+    fi
+    
+    echo "═══════════════════════════════════════"
+    echo "  API Keys Overview"
+    echo "═══════════════════════════════════════"
+    echo ""
+    
+    local index=1
+    local in_env=0
+    local current_name=""
+    local current_url=""
+    local current_key=""
+    
+    while IFS= read -r line; do
+        if echo "$line" | grep -q '"name"'; then
+            current_name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+        fi
+        
+        if echo "$line" | grep -q '"ANTHROPIC_BASE_URL"'; then
+            current_url=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
+        fi
+        
+        if echo "$line" | grep -q '"ANTHROPIC_AUTH_TOKEN"'; then
+            current_key=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
+            # Mask the key (show first 8 and last 4 chars)
+            local key_len=${#current_key}
+            if [ $key_len -gt 12 ]; then
+                local masked_key="${current_key:0:8}...${current_key: -4}"
+            else
+                local masked_key="${current_key:0:4}***"
+            fi
+            
+            printf "%d) \033[1;36m%s\033[0m\n" "$index" "$current_name"
+            printf "   URL: %s\n" "$current_url"
+            printf "   Key: \033[0;90m%s\033[0m\n\n" "$masked_key"
+            ((index++))
+        fi
+    done < "$CONFIG_FILE"
+    
+    echo "───────────────────────────────────────"
+    echo ""
+    echo "To edit keys: cc -E"
+    echo "To add model: cc -a"
+}
+
+# Parse arguments
+skip_perm=false
+only_env=false
+model_index=""
+claude_args=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -y|--bypass)
+            skip_perm=true
+            shift
+            ;;
+        -e|--env)
+            only_env=true
+            shift
+            ;;
+        -E|--edit)
+            edit_config
+            exit 0
+            ;;
+        -a|--add)
+            add_model
+            exit 0
+            ;;
+        -s|--show-keys)
+            show_keys
+            exit 0
+            ;;
+        -l|--list)
+            list_models
+            exit 0
+            ;;
+        -c|--current)
+            show_current
+            exit 0
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            claude_args=("$@")
+            break
+            ;;
+        [0-9]*)
+            model_index=$1
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+run_with_model "$model_index" "$skip_perm" "$only_env" "${claude_args[@]}"
