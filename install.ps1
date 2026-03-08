@@ -152,23 +152,11 @@ function Install-Script {
 # Create default config
 function Create-Config {
     if (-not (Test-Path $CONFIG_FILE)) {
-        Write-Warning "Creating default configuration..."
+        Write-Warning "Creating empty configuration..."
         
-        $defaultConfig = @(
-            "{",
-            '    "name": "Claude (Official)",',
-            '    "env": {',
-            '        "ANTHROPIC_BASE_URL": "https://api.anthropic.com",',
-            '        "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",',
-            '        "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",',
-            '        "ANTHROPIC_SMALL_FAST_MODEL": "claude-haiku-4-5-20251001"',
-            "    }",
-            "}"
-        ) -join "`n"
-        
-        Save-FileNoBOM -Path $CONFIG_FILE -Content "[$defaultConfig]"
-        Write-Success "[OK] Created config file: $CONFIG_FILE"
-        Write-Warning "  Please edit this file to add your API keys"
+        Save-FileNoBOM -Path $CONFIG_FILE -Content "[]"
+        Write-Success "[OK] Created empty config file: $CONFIG_FILE"
+        Write-Warning "  Run 'cc -a' to add your first model"
     } else {
         Write-Success "[OK] Config file already exists: $CONFIG_FILE"
     }
@@ -265,24 +253,176 @@ function Print-Success {
 
 # Uninstall function
 function Uninstall {
-    Write-Warning "Uninstalling cc-cli..."
+    param(
+        [switch]$KeepConfig,
+        [switch]$KeepSettings
+    )
     
+    Write-Info "==================================="
+    Write-Info "  CC-CLI Uninstaller"
+    Write-Info "==================================="
+    Write-Host ""
+    
+    $confirm = Read-Host "Are you sure you want to uninstall cc-cli? (y/N)"
+    if ($confirm -notin @("y", "Y", "yes", "YES")) {
+        Write-Host "Uninstall cancelled."
+        exit 0
+    }
+    
+    Write-Host ""
+    Write-Warning "Removing files..."
+    
+    # Remove main script
     if (Test-Path $SCRIPT_FILE) {
         Remove-Item $SCRIPT_FILE -Force
-    }
-    if (Test-Path $INSTALL_DIR) {
-        Remove-Item $INSTALL_DIR -Recurse -Force
+        Write-Success "[OK] Removed $SCRIPT_FILE"
+    } else {
+        Write-Warning "[!] Script file not found: $SCRIPT_FILE"
     }
     
-    Write-Success "[OK] Uninstalled cc-cli"
-    Write-Warning "  Config file preserved: $CONFIG_FILE"
-    Write-Warning "  Remove manually if needed: Remove-Item `"$CONFIG_FILE`""
+    # Remove installation directory
+    if (Test-Path $INSTALL_DIR) {
+        Remove-Item $INSTALL_DIR -Recurse -Force
+        Write-Success "[OK] Removed $INSTALL_DIR"
+    } else {
+        Write-Warning "[!] Installation directory not found: $INSTALL_DIR"
+    }
+    
+    # Remove temp env file
+    $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
+    if (Test-Path $ENV_FILE) {
+        Remove-Item $ENV_FILE -Force
+        Write-Success "[OK] Removed $ENV_FILE"
+    }
+    
+    # Remove config file (optional)
+    if (-not $KeepConfig) {
+        $configConfirm = Read-Host "`nDelete config file? (y/N)"
+        if ($configConfirm -in @("y", "Y", "yes", "YES")) {
+            if (Test-Path $CONFIG_FILE) {
+                Remove-Item $CONFIG_FILE -Force
+                Write-Success "[OK] Removed $CONFIG_FILE"
+            } else {
+                Write-Warning "[!] Config file not found: $CONFIG_FILE"
+            }
+        } else {
+            Write-Warning "[OK] Config file preserved: $CONFIG_FILE"
+        }
+    }
+    
+    # Remove Claude settings (optional)
+    $CLAUDE_SETTINGS_FILE = "$env:USERPROFILE\.claude\settings.json"
+    if (-not $KeepSettings) {
+        if (Test-Path $CLAUDE_SETTINGS_FILE) {
+            $settingsConfirm = Read-Host "`nRemove cc-cli entries from Claude settings? (y/N)"
+            if ($settingsConfirm -in @("y", "Y", "yes", "YES")) {
+                try {
+                    $settings = Get-Content $CLAUDE_SETTINGS_FILE -Raw | ConvertFrom-Json
+                    
+                    # Remove cc-cli added env variables
+                    if ($settings.env) {
+                        $settings.env.PSObject.Properties.Remove('ANTHROPIC_MODEL')
+                        $settings.env.PSObject.Properties.Remove('ANTHROPIC_SMALL_FAST_MODEL')
+                        $settings.env.PSObject.Properties.Remove('CLAUDE_CODE_MODEL')
+                        $settings.env.PSObject.Properties.Remove('CLAUDE_CODE_SMALL_MODEL')
+                        $settings.env.PSObject.Properties.Remove('CLAUDE_CODE_SUBAGENT_MODEL')
+                        
+                        # Remove env section if empty
+                        if ($settings.env.PSObject.Properties.Count -eq 0) {
+                            $settings.PSObject.Properties.Remove('env')
+                        }
+                    }
+                    
+                    # Remove model field
+                    if ($settings.model) {
+                        $settings.PSObject.Properties.Remove('model')
+                    }
+                    
+                    # Remove Agent(Explore) from deny list
+                    if ($settings.permissions -and $settings.permissions.deny) {
+                        $denyList = @($settings.permissions.deny) | Where-Object { $_ -ne "Agent(Explore)" }
+                        if ($denyList.Count -eq 0) {
+                            $settings.permissions.PSObject.Properties.Remove('deny')
+                        } else {
+                            $settings.permissions.deny = $denyList
+                        }
+                    }
+                    
+                    # Save cleaned settings
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                    $json = $settings | ConvertTo-Json -Depth 10
+                    [System.IO.File]::WriteAllText($CLAUDE_SETTINGS_FILE, $json, $utf8NoBom)
+                    
+                    Write-Success "[OK] Cleaned $CLAUDE_SETTINGS_FILE"
+                } catch {
+                    Write-Warning "[!] Failed to clean settings file: $_"
+                }
+            } else {
+                Write-Warning "[OK] Claude settings preserved: $CLAUDE_SETTINGS_FILE"
+            }
+        }
+    }
+    
+    # Remove from PATH
+    Write-Host ""
+    Write-Warning "Removing from PATH..."
+    $binDir = Split-Path $SCRIPT_FILE -Parent
+    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    
+    if ($currentPath -like "*$binDir*") {
+        $newPath = ($currentPath -split ';' | Where-Object { $_ -ne $binDir }) -join ';'
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Write-Success "[OK] Removed $binDir from PATH"
+        Write-Warning "  Please restart your terminal or run: `$env:PATH = `$env:PATH"
+    } else {
+        Write-Warning "[!] $binDir not found in PATH"
+    }
+    
+    # Remove wrapper from profile
+    Write-Host ""
+    Write-Warning "Cleaning PowerShell profile..."
+    if (Test-Path $PROFILE) {
+        $profileContent = Get-Content $PROFILE -Raw
+        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function cc \{.*?\}'
+        $newContent = $profileContent -replace $pattern, ''
+        $newContent = $newContent.TrimEnd()
+        
+        if ($newContent -ne $profileContent) {
+            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllText($PROFILE, $newContent, $utf8NoBom)
+            Write-Success "[OK] Removed cc function from $PROFILE"
+            Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
+        } else {
+            Write-Warning "[!] No cc function found in profile"
+        }
+    } else {
+        Write-Warning "[!] PowerShell profile not found"
+    }
+    
+    Write-Host ""
+    Write-Success "==================================="
+    Write-Success "  Uninstall Complete!"
+    Write-Success "==================================="
+    Write-Host ""
+    
     exit 0
 }
 
 # Main
 switch ($Action.ToLower()) {
-    "uninstall" { Uninstall }
+    "uninstall" {
+        [switch]$KeepConfig = $false
+        [switch]$KeepSettings = $false
+        
+        for ($i = 0; $i -lt $args.Count; $i++) {
+            switch ($args[$i]) {
+                "--keep-config" { $KeepConfig = $true }
+                "--keep-settings" { $KeepSettings = $true }
+            }
+        }
+        
+        Uninstall -KeepConfig:$KeepConfig -KeepSettings:$KeepSettings
+    }
     "help" {
         Write-Host "Usage: .\install.ps1 [-Branch <name>] [ACTION]"
         Write-Host ""
@@ -294,10 +434,15 @@ switch ($Action.ToLower()) {
         Write-Host "Options:"
         Write-Host "  -Branch     Specify branch to install (default: main)"
         Write-Host ""
+        Write-Host "Uninstall Options:"
+        Write-Host "  --keep-config      Preserve config file"
+        Write-Host "  --keep-settings    Preserve Claude settings"
+        Write-Host ""
         Write-Host "Examples:"
         Write-Host "  .\install.ps1"
         Write-Host "  .\install.ps1 -Branch feature/auto-fetch-zhipu-models"
         Write-Host "  .\install.ps1 -Action uninstall"
+        Write-Host "  .\install.ps1 -Action uninstall --keep-config"
         exit 0
     }
     default {

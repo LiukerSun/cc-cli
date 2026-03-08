@@ -83,10 +83,13 @@ cd cc-cli
 cc --version
 cc --help
 
-# Windows PowerShell
-cc -Version
-cc -Help
+# Windows PowerShell (不区分大小写)
+cc -version
+cc -help
 ```
+
+> 💡 Windows PowerShell 不区分大小写，`-V` 和 `-v`、`-U` 和 `-u` 等效果相同。
+> 为避免冲突，部分命令仅支持长选项（如 `--edit`、`--validate`、`--uninstall`）。
 
 ## 🚀 快速开始
 
@@ -207,11 +210,13 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 ### 配置管理
 | 命令 | 说明 |
 |------|------|
-| `cc -E, --edit` | 编辑配置文件 |
+| `cc --edit` | 编辑配置文件 |
 | `cc -a, --add` | 交互式添加新模型 |
 | `cc -d, --delete N` | 删除模型 #N |
-| `cc -s, --show-keys` | 查看 API keys（部分隐藏） |
+| `cc -s, --show` | 查看 API keys（部分隐藏） |
+| `cc --validate` | 验证并修复配置文件 |
 | `cc -U, --upgrade` | 升级到最新版本 |
+| `cc --uninstall` | 卸载 cc-cli |
 
 ### 模型选择
 | 命令 | 说明 |
@@ -224,12 +229,6 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 | 命令 | 说明 |
 |------|------|
 | `cc -e 2` | 仅设置环境变量，不启动 Claude |
-
-### 版本管理
-| 命令 | 说明 |
-|------|------|
-| `cc -V, --version` | 显示当前版本 |
-| `cc -U, --upgrade` | 升级到最新版本 |
 
 ## ⚙ 交互式选择
 
@@ -438,9 +437,29 @@ Windows PowerShell 用户请参考 [Windows 故障排除指南](docs/windows-tro
 
 ## 🗑️ 卸载
 
+### macOS / Linux
+
 ```bash
+# 使用安装脚本
 ./install.sh --uninstall
+
+# 或使用 cc 命令
+cc --uninstall
 ```
+
+### Windows
+
+```powershell
+# 使用安装脚本
+.\install.ps1 -Action uninstall
+
+# 或使用 cc 命令
+cc --uninstall
+```
+
+卸载时会提示确认，并可选择：
+- 是否删除配置文件
+- 是否清理 Claude settings 文件
 
 ## 🤝 贡献
 

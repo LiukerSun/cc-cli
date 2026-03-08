@@ -2,6 +2,38 @@
 
 本项目的所有重要变更都将记录在此文件中。
 
+## [1.5.0] - 2026-03-09
+
+### 新增
+- **完整卸载功能** - 为 Windows、Linux 和 macOS 添加交互式卸载流程
+  - 删除脚本文件和安装目录
+  - 可选删除配置文件和 Claude settings
+  - 清理 PATH 环境变量
+  - 清理 Shell 配置文件（PowerShell profile / .bashrc / .zshrc）
+  - 支持 `--keep-config` 和 `--keep-settings` 参数保留特定文件
+- **统一 CLI 参数** - 所有平台使用一致的命令参数
+  - `-y, --bypass` - 跳过权限
+  - `-e, --env` - 仅设置环境变量
+  - `-l, --list` - 列出模型
+  - `-c, --current` - 显示当前模型
+  - `--edit` - 编辑配置
+  - `-a, --add` - 添加模型
+  - `-d, --delete` - 删除模型
+  - `-s, --show` - 显示 API 密钥
+  - `--validate` - 验证配置
+  - `-U, --upgrade` - 升级
+  - `-V, --version` - 版本
+  - `--uninstall` - 卸载
+  - `-h, --help` - 帮助
+- **validate_config 命令** - 验证并自动修复配置文件（Linux/macOS）
+
+### 变更
+- **安装脚本** - 创建空配置文件 `[]` 而非默认模板
+- **PowerShell 参数** - 不区分大小写，统一使用小写短选项 + 长选项
+
+### 修复
+- **中文乱码** - 移除所有中文提示，避免 Windows 终端乱码问题
+
 ## [1.4.0] - 2026-03-09
 
 ### 新增
@@ -165,6 +197,7 @@
 
 | 版本 | 提交日期 | 提交类型 | 提交摘要 |
 |------|----------|----------|----------|
+| 1.5.0 | 2026-03-09 | feat | 完整卸载功能 + 统一 CLI 参数 |
 | 1.4.0 | 2026-03-09 | feat | add Alibaba Coding Plan (百炼) support |
 | 1.3.4 | 2026-03-08 | feat | Team Subagent 模型同步 (Windows) |
 | 1.3.3 | 2026-03-08 | feat | Team Subagent 模型同步 |
