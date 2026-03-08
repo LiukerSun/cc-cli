@@ -28,18 +28,19 @@ function Show-Help {
     Write-Host "Start Claude with selected model configuration."
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -y, -bypass     Enable bypass permissions"
-    Write-Host "  -e, -env        Only set environment variables"
-    Write-Host "  -l, -list       List all available models"
-    Write-Host "  -c, -current    Show current model"
-    Write-Host "  -E, -edit       Edit configuration file"
-    Write-Host "  -a, -add        Add a new model configuration"
-    Write-Host "  -d, -delete N   Delete model #N"
-    Write-Host "  -s, -show       Show API keys (partially hidden)"
-    Write-Host "  -v, -validate   Validate and repair config file"
-    Write-Host "  -U, -upgrade    Upgrade to latest version"
-    Write-Host "  -V, -version    Show version"
-    Write-Host "  -h, -help       Show this help message"
+    Write-Host "  -y, --bypass      Enable bypass permissions"
+    Write-Host "  -e, --env         Only set environment variables"
+    Write-Host "  -l, --list        List all available models"
+    Write-Host "  -c, --current     Show current model"
+    Write-Host "  --edit            Edit configuration file"
+    Write-Host "  -a, --add         Add a new model configuration"
+    Write-Host "  -d, --delete N    Delete model #N"
+    Write-Host "  -s, --show        Show API keys (partially hidden)"
+    Write-Host "  --validate        Validate and repair config file"
+    Write-Host "  -U, --upgrade     Upgrade to latest version"
+    Write-Host "  -V, --version     Show version"
+    Write-Host "  --uninstall       Uninstall cc-cli"
+    Write-Host "  -h, --help        Show this help message"
     Write-Host ""
     Write-Host "Note: This command also updates ~/.claude/settings.json with the selected"
     Write-Host "      model to ensure team subagents use the same model configuration."
@@ -57,6 +58,19 @@ function Show-Help {
 
 function Show-Version {
     Write-Host "cc version $CC_VERSION"
+}
+
+function Uninstall-CC {
+    $installScript = "$env:USERPROFILE\.cc-cli\install.ps1"
+    
+    if (Test-Path $installScript) {
+        & $installScript -Action uninstall @args
+    } else {
+        Write-Error "Install script not found: $installScript"
+        Write-Host "Please run uninstall manually:"
+        Write-Host "  irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex -ArgumentList 'uninstall'"
+        exit 1
+    }
 }
 
 function Get-LatestVersion {
@@ -1109,18 +1123,19 @@ $foundSeparator = $false
 
 for ($i = 0; $i -lt $args.Count; $i++) {
     $arg = $args[$i]
+    $argLower = $arg.ToLower()
     
     if ($foundSeparator) {
         $claudeArgs += $arg
     } else {
-        switch ($arg) {
-            { $_ -in "-y", "-bypass", "--bypass" } { $skipPerm = $true }
-            { $_ -in "-e", "-env", "--env" } { $onlyEnv = $true }
-            { $_ -in "-l", "-list", "--list" } { Show-List; exit 0 }
-            { $_ -in "-c", "-current", "--current" } { Show-Current; exit 0 }
-            { $_ -in "-E", "-edit", "--edit" } { Edit-Config; exit 0 }
-            { $_ -in "-a", "-add", "--add" } { Add-Model; exit 0 }
-            { $_ -in "-d", "-delete", "--delete" } {
+        switch ($argLower) {
+            { $_ -in "-y", "--bypass" } { $skipPerm = $true }
+            { $_ -in "-e", "--env" } { $onlyEnv = $true }
+            { $_ -in "-l", "--list" } { Show-List; exit 0 }
+            { $_ -in "-c", "--current" } { Show-Current; exit 0 }
+            "--edit" { Edit-Config; exit 0 }
+            { $_ -in "-a", "--add" } { Add-Model; exit 0 }
+            { $_ -in "-d", "--delete" } {
                 $i++
                 if ($i -ge $args.Count) {
                     Write-Error "--delete requires a model index"
@@ -1129,11 +1144,19 @@ for ($i = 0; $i -lt $args.Count; $i++) {
                 Remove-Model -Index ([int]$args[$i])
                 exit 0
             }
-            { $_ -in "-s", "-show", "--show-keys" } { Show-Keys; exit 0 }
-            { $_ -in "-v", "-validate", "--validate" } { Validate-Config; exit 0 }
-            { $_ -in "-U", "-upgrade", "--upgrade" } { Upgrade-CC; exit 0 }
-            { $_ -in "-V", "-version", "--version" } { Show-Version; exit 0 }
-            { $_ -in "-h", "-help", "--help" } { Show-Help; exit 0 }
+            { $_ -in "-s", "--show" } { Show-Keys; exit 0 }
+            "--validate" { Validate-Config; exit 0 }
+            { $_ -in "-u", "--upgrade" } { Upgrade-CC; exit 0 }
+            { $_ -in "-v", "--version" } { Show-Version; exit 0 }
+            "--uninstall" {
+                $remainingArgs = @()
+                for ($j = $i + 1; $j -lt $args.Count; $j++) {
+                    $remainingArgs += $args[$j]
+                }
+                Uninstall-CC @remainingArgs
+                exit 0
+            }
+            { $_ -in "-h", "--help" } { Show-Help; exit 0 }
             "--" { $foundSeparator = $true }
             { $_ -match "^\d+$" } { $modelIndex = [int]$_ }
             default {

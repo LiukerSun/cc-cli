@@ -87,23 +87,11 @@ install_script() {
 # Create default config
 create_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo -e "${YELLOW}Creating default configuration...${NC}"
+        echo -e "${YELLOW}Creating empty configuration...${NC}"
         
-        cat > "$CONFIG_FILE" << 'EOF'
-[
-    {
-        "name": "Claude (Official)",
-        "env": {
-            "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
-            "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",
-            "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
-            "ANTHROPIC_SMALL_FAST_MODEL": "claude-haiku-4-5-20251001"
-        }
-    }
-]
-EOF
-        echo -e "${GREEN}✓ Created config file: $CONFIG_FILE${NC}"
-        echo -e "${YELLOW}  Please edit this file to add your API keys${NC}"
+        echo "[]" > "$CONFIG_FILE"
+        echo -e "${GREEN}✓ Created empty config file: $CONFIG_FILE${NC}"
+        echo -e "${YELLOW}  Run 'cc -a' to add your first model${NC}"
     else
         echo -e "${GREEN}✓ Config file already exists: $CONFIG_FILE${NC}"
     fi
@@ -164,14 +152,108 @@ print_success() {
 
 # Uninstall function
 uninstall() {
-    echo -e "${YELLOW}Uninstalling cc-cli...${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════${NC}"
+    echo -e "${BLUE}  CC-CLI Uninstaller${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════${NC}"
+    echo ""
     
-    [ -f "$BIN_DIR/cc" ] && rm -f "$BIN_DIR/cc"
-    [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR"
+    read -p "Are you sure you want to uninstall cc-cli? (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy](es)?$ ]]; then
+        echo "Uninstall cancelled."
+        exit 0
+    fi
     
-    echo -e "${GREEN}✓ Uninstalled cc-cli${NC}"
-    echo -e "${YELLOW}  Config file preserved: $CONFIG_FILE${NC}"
-    echo -e "${YELLOW}  Remove manually if needed: rm $CONFIG_FILE${NC}"
+    echo ""
+    echo -e "${YELLOW}Removing files...${NC}"
+    
+    # Remove main script
+    if [ -f "$BIN_DIR/cc" ]; then
+        rm -f "$BIN_DIR/cc"
+        echo -e "${GREEN}✓ Removed $BIN_DIR/cc${NC}"
+    else
+        echo -e "${YELLOW}✗ Script file not found: $BIN_DIR/cc${NC}"
+    fi
+    
+    # Remove installation directory
+    if [ -d "$INSTALL_DIR" ]; then
+        rm -rf "$INSTALL_DIR"
+        echo -e "${GREEN}✓ Removed $INSTALL_DIR${NC}"
+    else
+        echo -e "${YELLOW}✗ Installation directory not found: $INSTALL_DIR${NC}"
+    fi
+    
+    # Remove temp env file
+    ENV_FILE="/tmp/cc-model-env.sh"
+    if [ -f "$ENV_FILE" ]; then
+        rm -f "$ENV_FILE"
+        echo -e "${GREEN}✓ Removed $ENV_FILE${NC}"
+    fi
+    
+    # Remove config file (optional)
+    echo ""
+    read -p "Delete config file? (y/N): " config_confirm
+    if [[ "$config_confirm" =~ ^[Yy](es)?$ ]]; then
+        if [ -f "$CONFIG_FILE" ]; then
+            rm -f "$CONFIG_FILE"
+            echo -e "${GREEN}✓ Removed $CONFIG_FILE${NC}"
+        else
+            echo -e "${YELLOW}✗ Config file not found: $CONFIG_FILE${NC}"
+        fi
+    else
+        echo -e "${YELLOW}✓ Config file preserved: $CONFIG_FILE${NC}"
+    fi
+    
+    # Remove Claude settings (optional)
+    CLAUDE_SETTINGS_FILE="$HOME/.claude/settings.json"
+    if [ -f "$CLAUDE_SETTINGS_FILE" ]; then
+        echo ""
+        read -p "Remove cc-cli entries from Claude settings? (y/N): " settings_confirm
+        if [[ "$settings_confirm" =~ ^[Yy](es)?$ ]]; then
+            if command -v jq &> /dev/null; then
+                # Use jq to clean settings
+                jq 'del(.env.ANTHROPIC_MODEL, .env.ANTHROPIC_SMALL_FAST_MODEL, .env.CLAUDE_CODE_MODEL, .env.CLAUDE_CODE_SMALL_MODEL, .env.CLAUDE_CODE_SUBAGENT_MODEL, .model) | .permissions.deny = (.permissions.deny // [] | map(select(. != "Agent(Explore)"))) | if (.permissions.deny | length) == 0 then del(.permissions.deny) else . end | if (.env | length) == 0 then del(.env) else . end | if (.permissions | length) == 0 then del(.permissions) else . end' "$CLAUDE_SETTINGS_FILE" > "$CLAUDE_SETTINGS_FILE.tmp" && mv "$CLAUDE_SETTINGS_FILE.tmp" "$CLAUDE_SETTINGS_FILE"
+                echo -e "${GREEN}✓ Cleaned $CLAUDE_SETTINGS_FILE${NC}"
+            else
+                echo -e "${YELLOW}✗ jq not found, skipping settings cleanup${NC}"
+            fi
+        else
+            echo -e "${YELLOW}✓ Claude settings preserved: $CLAUDE_SETTINGS_FILE${NC}"
+        fi
+    fi
+    
+    # Remove from shell configuration
+    echo ""
+    echo -e "${YELLOW}Cleaning shell configuration...${NC}"
+    
+    for shell_rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
+        if [ -f "$shell_rc" ]; then
+            if grep -q '# Added by cc-cli' "$shell_rc" 2>/dev/null; then
+                # Remove cc-cli entries
+                local temp_file=$(mktemp)
+                awk '
+                    /^# Added by cc-cli$/ { skip=1; next }
+                    /^export PATH="\$HOME\/bin:\$PATH"$/ { if (skip) next }
+                    skip && /^$/ { next }
+                    skip && !/^export PATH/ { skip=0 }
+                    { print }
+                ' "$shell_rc" > "$temp_file" && mv "$temp_file" "$shell_rc"
+                echo -e "${GREEN}✓ Cleaned $shell_rc${NC}"
+            else
+                echo -e "${YELLOW}✗ No cc-cli entries in $shell_rc${NC}"
+            fi
+        fi
+    done
+    
+    # Reload shell config reminder
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════${NC}"
+    echo -e "${GREEN}  Uninstall Complete!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${YELLOW}  Please restart your shell or run:${NC}"
+    echo -e "  ${BLUE}source ~/.zshrc${NC}  # or ~/.bashrc"
+    echo ""
+    
     exit 0
 }
 
