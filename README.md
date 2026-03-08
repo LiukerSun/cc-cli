@@ -31,6 +31,9 @@
 - ⚡ **零依赖** - 纯 Bash 实现，无外部依赖
 - 🔄 **Bypass 模式** - 支持 `CLAUDE_SKIP_PERMISSIONS`
 - 📦 **配置持久化** - 自动保存和恢复上次选择
+- 🤖 **Team Subagent 支持** - 自动同步模型配置到 Claude Code，确保子代理使用相同模型
+- 🔀 **多提供商支持** - 支持 Anthropic、智谱 AI、阿里云百炼（Coding Plan）等
+- 📡 **自动获取模型** - 配置时自动从 API 获取最新模型列表
 
 ## 📦 安装
 
@@ -125,9 +128,10 @@ cc -E    # 用 vim 打开配置文件
 cc -a    # 交互式添加新模型
 ```
 
-支持两种添加方式：
-1. **厂商自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
-2. **手动输入** - 手动填写所有配置信息
+支持三种添加方式：
+1. **ZHIPU AI 自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
+2. **Alibaba Coding Plan (百炼)** - 选择阿里云百炼，输入 API Key，自动获取编程模型列表
+3. **手动输入** - 手动填写所有配置信息
 
 #### ZHIPU AI 快速配置示例
 
@@ -135,9 +139,10 @@ cc -a    # 交互式添加新模型
 $ cc -a
 Select provider:
   1) ZHIPU AI (智谱) - auto fetch models
-  2) Manual input
+  2) Alibaba Coding Plan (百炼) - auto fetch models
+  3) Manual input
 
-Choice [1-2]: 1
+Choice [1-3]: 1
 
 API Key: your-zhipu-api-key
 
@@ -153,7 +158,39 @@ Available Models:
 Select main model [1-N]: 2
 Select fast model [1-N] (default: same as main): 3
 
-✓ Model 'ZHIPU (GLM-4-Air)' added successfully!
+Model 'ZHIPU (GLM-4-Air)' added successfully!
+```
+
+#### Alibaba Coding Plan (百炼) 快速配置示例
+
+```bash
+$ cc -a
+Select provider:
+  1) ZHIPU AI (智谱) - auto fetch models
+  2) Alibaba Coding Plan (百炼) - auto fetch models
+  3) Manual input
+
+Choice [1-3]: 2
+
+API Key: your-dashscope-api-key
+
+Fetching models from Alibaba Coding Plan... Done!
+
+Available Models:
+
+   1) qwen3.5-plus
+   2) qwen3-max-2026-01-23
+   3) qwen3-coder-next
+   4) qwen3-coder-plus
+   5) glm-5
+   6) glm-4.7
+   7) kimi-k2.5
+   8) minimax-m2.5
+
+Select main model [1-8]: 1
+Select fast model [1-8] (default: same as main): 4
+
+Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 ```
 
 ## 📖 命令参考
@@ -287,7 +324,16 @@ cc 1  # 选择 qwen3.5-plus
 **工作原理：**
 - `cc` 脚本会自动更新 `~/.claude/settings.json` 文件
 - 将当前模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 写入配置
+- 同时设置 `CLAUDE_CODE_MODEL`、`CLAUDE_CODE_SMALL_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 环境变量
 - Claude Code 启动时读取这些环境变量，subagent 也会继承
+- 自动禁用 Explore subagent（因为它硬编码使用 Haiku 模型，自定义 API 提供商不支持）
+
+**环境变量说明：**
+| 环境变量 | 说明 |
+|----------|------|
+| `CLAUDE_CODE_MODEL` | 主模型配置，覆盖所有 Agent 的默认模型 |
+| `CLAUDE_CODE_SMALL_MODEL` | 快速模型配置，用于简单任务 |
+| `CLAUDE_CODE_SUBAGENT_MODEL` | 专门用于 Team Subagent 的模型配置 |
 
 ### 升级到最新版本
 
@@ -351,6 +397,44 @@ cc -e 2
 source /tmp/cc-model-env.sh
 claude
 ```
+
+## 🔧 故障排除
+
+### 常见问题
+
+**1. Claude 未安装**
+```bash
+# 安装 Claude CLI
+# 访问 https://claude.ai 下载
+```
+
+**2. 配置文件损坏**
+```bash
+# 备份并重新创建
+cp ~/.cc-config.json ~/.cc-config.json.backup
+cc --add
+```
+
+**3. 权限问题**
+```bash
+# 确保安装目录权限
+chmod 755 ~/.cc-cli
+chmod +x ~/bin/cc
+```
+
+**4. Subagent 不使用自定义模型**
+- 确保运行 `cc` 命令选择模型后启动 Claude
+- `cc` 会自动更新 `~/.claude/settings.json`
+- 检查 `~/.claude/settings.json` 中是否有正确的环境变量配置
+
+**5. API 请求失败**
+- 检查 API Key 是否正确
+- 确认 API 端点 URL 正确
+- 查看网络防火墙设置
+
+### Windows 特定问题
+
+Windows PowerShell 用户请参考 [Windows 故障排除指南](docs/windows-troubleshooting.md)
 
 ## 🗑️ 卸载
 

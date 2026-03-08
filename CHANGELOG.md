@@ -2,6 +2,21 @@
 
 本项目的所有重要变更都将记录在此文件中。
 
+## [1.4.0] - 2026-03-09
+
+### 新增
+- **阿里云百炼 Coding Plan 支持** - 添加阿里云百炼 Coding Plan 模型配置，兼容 Anthropic API 协议
+  - 添加 `add_alibaba_coding_plan` / `Add-AlibabaCodingPlan` 函数
+  - 支持自动从百炼 API 获取模型列表
+  - 支持预定义模型列表作为回退（当 API 不可用时）
+  - 支持的模型包括：qwen3.5-plus、qwen3-max、qwen3-coder 系列、glm-5、glm-4.7、kimi-k2.5、minimax-m2.5
+  - API 端点：`https://coding.dashscope.aliyuncs.com/apps/anthropic`
+
+### 变更
+- bin/cc - 添加 provider 选项 2) Alibaba Coding Plan
+- bin/cc.ps1 - 添加 Add-AlibabaCodingPlan 函数
+- 更新交互提示，支持 3 个 provider 选项
+
 ## [1.3.4] - 2026-03-08
 
 ### 新增
@@ -143,3 +158,39 @@
 - LICENSE
 - 安装指南
 - 配置示例
+
+---
+
+## 版本提交统计
+
+| 版本 | 提交日期 | 提交类型 | 提交摘要 |
+|------|----------|----------|----------|
+| 1.4.0 | 2026-03-09 | feat | add Alibaba Coding Plan (百炼) support |
+| 1.3.4 | 2026-03-08 | feat | Team Subagent 模型同步 (Windows) |
+| 1.3.3 | 2026-03-08 | feat | Team Subagent 模型同步 |
+| 1.3.1 | 2026-03-04 | fix | 配置文件损坏问题修复 |
+| 1.3.0 | 2025-03-04 | feat | --upgrade 自动升级命令 |
+| 1.2.0 | 2025-03-03 | feat | --version 和 --delete 命令 |
+| 1.1.0 | 2025-03-03 | fix | Windows BOM 处理和兼容性修复 |
+| 1.0.0 | 2024-03-03 | feat | initial release |
+
+---
+
+## 提交类型说明
+
+本项目的提交信息遵循 [约定式提交规范](https://www.conventionalcommits.org/)：
+
+- **feat** - 新功能
+- **fix** - Bug 修复
+- **docs** - 文档更新
+- **refactor** - 代码重构（既不是新功能也不是修复）
+- **style** - 代码格式调整（不影响代码运行）
+- **perf** - 性能优化
+- **test** - 测试相关
+- **chore** - 构建过程或辅助工具变动
+- **ci** - CI 配置
+- **build** - 构建相关
+
+---
+
+*本文件最后更新：2026-03-09*

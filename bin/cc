@@ -523,13 +523,16 @@ add_model() {
     echo ""
     echo "Select provider:"
     echo "  1) ZHIPU AI - auto fetch models"
-    echo "  2) Manual input"
+    echo "  2) Alibaba Coding Plan (百炼) - auto fetch models"
+    echo "  3) Manual input"
     echo ""
-    read -p "Choice [1-2]: " provider_choice
-    
+    read -p "Choice [1-3]: " provider_choice
+
     if [ "$provider_choice" = "1" ]; then
         add_zhipu_model
     elif [ "$provider_choice" = "2" ]; then
+        add_alibaba_coding_plan
+    elif [ "$provider_choice" = "3" ]; then
         add_manual_model
     else
         echo "Error: Invalid choice"
@@ -608,8 +611,103 @@ add_zhipu_model() {
     fi
     
     local model_name="ZHIPU ($main_model)"
-    
+
     save_model_config "$model_name" "https://open.bigmodel.cn/api/anthropic" "$api_key" "$main_model" "$fast_model"
+}
+
+add_alibaba_coding_plan() {
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  Alibaba Coding Plan (百炼) Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+    read -p "API Key: " api_key
+    [ -z "$api_key" ] && echo "Error: API Key is required" && exit 1
+
+    echo ""
+    printf "Fetching models from Alibaba Coding Plan"
+
+    # Alibaba DashScope models endpoint
+    local models_url="https://dashscope.aliyuncs.com/api/v1/models"
+    local response
+    response=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $api_key" "$models_url" 2>/dev/null)
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+
+    local model_list=""
+
+    if [ "$http_code" = "200" ]; then
+        echo " Done!"
+        echo ""
+        # Parse model list from response - extract model names
+        # Filter for coding-related models: qwen, glm, kimi, minimax
+        model_list=$(echo "$body" | grep -o '"model":"[^"]*"' | sed 's/"model":"//;s/"$//' | grep -E '^(qwen|glm|kimi|minimax)' | sort -u)
+
+        if [ -z "$model_list" ]; then
+            echo "No coding models found in API response, trying alternative parsing..."
+            # Alternative: try to parse data[].id field
+            model_list=$(echo "$body" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"$//' | grep -E '^(qwen|glm|kimi|minimax)' | sort -u)
+        fi
+    else
+        echo ""
+        echo "Note: API request failed (HTTP $http_code) - this is normal if using Coding Plan API key"
+        echo "Using predefined model list from Coding Plan documentation..."
+    fi
+
+    if [ -z "$model_list" ]; then
+        # If API doesn't return models, use predefined list based on documentation
+        model_list="qwen3.5-plus
+qwen3-max-2026-01-23
+qwen3-coder-next
+qwen3-coder-plus
+glm-5
+glm-4.7
+kimi-k2.5
+minimax-m2.5"
+    fi
+
+    local models=()
+    while IFS= read -r model; do
+        [ -n "$model" ] && models+=("$model")
+    done <<< "$model_list"
+
+    local count=${#models[@]}
+
+    if [ "$count" -eq 0 ]; then
+        echo "Error: No models available"
+        exit 1
+    fi
+
+    echo "Available Models:"
+    echo ""
+    local i=1
+    for model in "${models[@]}"; do
+        printf "  %2d) %s\n" "$i" "$model"
+        ((i++))
+    done
+    echo ""
+
+    read -p "Select main model [1-$count]: " main_idx
+    if ! [[ "$main_idx" =~ ^[0-9]+$ ]] || [ "$main_idx" -lt 1 ] || [ "$main_idx" -gt "$count" ]; then
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+    local main_model="${models[$main_idx-1]}"
+
+    read -p "Select fast model [1-$count] (default: same as main): " fast_idx
+    local fast_model
+    if [ -z "$fast_idx" ]; then
+        fast_model="$main_model"
+    elif [[ "$fast_idx" =~ ^[0-9]+$ ]] && [ "$fast_idx" -ge 1 ] && [ "$fast_idx" -le "$count" ]; then
+        fast_model="${models[$fast_idx-1]}"
+    else
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+
+    local model_name="Alibaba Coding Plan ($main_model)"
+
+    save_model_config "$model_name" "https://coding.dashscope.aliyuncs.com/apps/anthropic" "$api_key" "$main_model" "$fast_model"
 }
 
 add_manual_model() {

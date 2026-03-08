@@ -461,14 +461,16 @@ function Add-Model {
     Write-Host ""
     Write-Host "Select provider:"
     Write-Host "  1) ZHIPU AI - auto fetch models"
-    Write-Host "  2) Manual input"
+    Write-Host "  2) Alibaba Coding Plan (百炼) - auto fetch models"
+    Write-Host "  3) Manual input"
     Write-Host ""
-    
-    $choice = Read-Host "Choice [1-2]"
-    
+
+    $choice = Read-Host "Choice [1-3]"
+
     switch ($choice) {
         "1" { Add-ZhipuModel }
-        "2" { Add-ManualModel }
+        "2" { Add-AlibabaCodingPlan }
+        "3" { Add-ManualModel }
         default {
             Write-Error "Invalid choice"
             exit 1
@@ -538,6 +540,99 @@ function Add-ZhipuModel {
         Write-Error "Failed to fetch models: $_"
         exit 1
     }
+}
+
+function Add-AlibabaCodingPlan {
+    Write-Host ""
+    Write-Host "==================================="
+    Write-Host "  Alibaba Coding Plan (百炼) Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+
+    $apiKey = Read-Host "API Key"
+    if (-not $apiKey) {
+        Write-Error "API Key is required"
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "Fetching models from Alibaba Coding Plan..." -NoNewline
+
+    $allModels = @()
+    $apiSuccess = $false
+
+    try {
+        $headers = @{
+            "Authorization" = "Bearer $apiKey"
+        }
+
+        # Try the models API endpoint
+        $response = Invoke-RestMethod -Uri "https://dashscope.aliyuncs.com/api/v1/models" -Headers $headers -Method Get -ErrorAction Stop
+
+        Write-Host " Done!"
+        Write-Host ""
+        $apiSuccess = $true
+
+        # Parse models from response and filter for coding-related models
+        $allModels = @($response.data | Where-Object {
+            $_.model -match '^(qwen|glm|kimi|minimax)'
+        } | Sort-Object -Property model)
+
+        if ($allModels.Count -eq 0) {
+            # Try alternative field name
+            $allModels = @($response.data | Where-Object {
+                $_.id -match '^(qwen|glm|kimi|minimax)'
+            } | Sort-Object -Property id)
+        }
+
+    } catch {
+        Write-Host ""
+        Write-Host "Note: API request failed - this is normal if using Coding Plan API key" -ForegroundColor Yellow
+        Write-Host "Using predefined model list from Coding Plan documentation..."
+    }
+
+    # If API didn't return models, use predefined list from documentation
+    if ($allModels.Count -eq 0) {
+        $predefinedModels = @(
+            "qwen3.5-plus",
+            "qwen3-max-2026-01-23",
+            "qwen3-coder-next",
+            "qwen3-coder-plus",
+            "glm-5",
+            "glm-4.7",
+            "kimi-k2.5",
+            "minimax-m2.5"
+        )
+        $allModels = @($predefinedModels | ForEach-Object { [PSCustomObject]@{ id = $_ } })
+    }
+
+    Write-Host "Available Models:"
+    Write-Host ""
+
+    for ($i = 0; $i -lt $allModels.Count; $i++) {
+        $modelId = if ($allModels[$i].model) { $allModels[$i].model } else { $allModels[$i].id }
+        Write-Host "  $($i + 1)) $modelId"
+    }
+    Write-Host ""
+
+    $mainIdx = Read-Host "Select main model [1-$($allModels.Count)]"
+    if (-not ($mainIdx -match "^\d+$") -or [int]$mainIdx -lt 1 -or [int]$mainIdx -gt $allModels.Count) {
+        Write-Error "Invalid selection"
+        exit 1
+    }
+    $mainModelObj = $allModels[[int]$mainIdx - 1]
+    $mainModel = if ($mainModelObj.model) { $mainModelObj.model } else { $mainModelObj.id }
+
+    $fastIdx = Read-Host "Select fast model [1-$($allModels.Count)] (default: same as main)"
+    $fastModel = $mainModel
+    if ($fastIdx -and $fastIdx -match "^\d+$" -and [int]$fastIdx -ge 1 -and [int]$fastIdx -le $allModels.Count) {
+        $fastModelObj = $allModels[[int]$fastIdx - 1]
+        $fastModel = if ($fastModelObj.model) { $fastModelObj.model } else { $fastModelObj.id }
+    }
+
+    $modelName = "Alibaba Coding Plan ($mainModel)"
+
+    Save-ModelConfig -Name $modelName -BaseUrl "https://coding.dashscope.aliyuncs.com/apps/anthropic" -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
 }
 
 function Add-ManualModel {
