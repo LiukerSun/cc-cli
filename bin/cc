@@ -198,6 +198,15 @@ upgrade() {
     
     rm -rf "$tmp_dir"
     
+    # Verify PATH includes ~/bin
+    if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+        echo ""
+        echo "⚠ Warning: ~/bin is not in your PATH"
+        echo "  Please add it to your shell configuration:"
+        echo "  echo 'export PATH=\"\$HOME/bin:\$PATH\"' >> ~/.bashrc"
+        echo "  source ~/.bashrc"
+    fi
+    
     echo ""
     echo "═══════════════════════════════════════"
     echo "  ✓ Upgrade Complete!"
@@ -479,6 +488,7 @@ run_with_model() {
 
     if [ "$skip_perm" = "true" ]; then
         echo "export CLAUDE_SKIP_PERMISSIONS=1" >> "$ENV_FILE"
+        echo "export IS_SANDBOX=1" >> "$ENV_FILE"
     fi
 
     # Add CLAUDE_CODE_MODEL environment variables for subagent support

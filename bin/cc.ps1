@@ -1084,6 +1084,7 @@ function Run-WithModel {
 
     if ($SkipPerm) {
         $envContent += "`$env:CLAUDE_SKIP_PERMISSIONS = `"1`"`n"
+        $envContent += "`$env:IS_SANDBOX = `"1`"`n"
     }
 
     # Add CLAUDE_CODE_MODEL environment variables for subagent support

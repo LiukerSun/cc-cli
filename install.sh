@@ -74,10 +74,14 @@ install_script() {
         # Local installation
         cp ./bin/cc "$BIN_DIR/cc"
         cp ./install.sh "$INSTALL_DIR/install.sh"
+        if [ -f "./VERSION" ]; then
+            cp ./VERSION "$INSTALL_DIR/VERSION"
+        fi
     else
         # Remote installation
         curl -fsSL "$REPO_URL/raw/main/bin/cc" -o "$BIN_DIR/cc"
         curl -fsSL "$REPO_URL/raw/main/install.sh" -o "$INSTALL_DIR/install.sh"
+        curl -fsSL "$REPO_URL/raw/main/VERSION" -o "$INSTALL_DIR/VERSION"
     fi
     
     chmod +x "$BIN_DIR/cc"
@@ -114,20 +118,46 @@ update_shell() {
     fi
     
     if [ -n "$shell_rc" ]; then
-        # Check if PATH already includes ~/bin
-        if ! grep -q 'export PATH="$HOME/bin:$PATH"' "$shell_rc" 2>/dev/null; then
-            echo "" >> "$shell_rc"
-            echo "# Added by cc-cli" >> "$shell_rc"
-            echo 'export PATH="$HOME/bin:$PATH"' >> "$shell_rc"
-            echo -e "${GREEN}✓ Added ~/bin to PATH in $shell_rc${NC}"
-        else
-            echo -e "${GREEN}✓ ~/bin already in PATH${NC}"
+        # Remove old cc-cli PATH entries
+        if grep -q '# Added by cc-cli' "$shell_rc" 2>/dev/null; then
+            local temp_file=$(mktemp)
+            grep -v '# Added by cc-cli' "$shell_rc" | grep -v 'export PATH="\$HOME/bin:\$PATH"' > "$temp_file"
+            mv "$temp_file" "$shell_rc"
         fi
+        
+        # Add ~/bin to PATH at the end (will be sourced last)
+        echo "" >> "$shell_rc"
+        echo "# Added by cc-cli" >> "$shell_rc"
+        echo 'export PATH="$HOME/bin:$PATH"' >> "$shell_rc"
+        echo -e "${GREEN}✓ Ensured ~/bin is first in PATH in $shell_rc${NC}"
+        
+        # Also update current session
+        export PATH="$HOME/bin:$PATH"
     fi
     echo ""
 }
 
-# Print success message
+# Verify installation
+verify_installation() {
+    echo -e "${YELLOW}Verifying installation...${NC}"
+    
+    # Update PATH for current session
+    export PATH="$HOME/bin:$PATH"
+    
+    # Check if cc command exists and points to correct location
+    local cc_path=$(command -v cc 2>/dev/null)
+    if [ -z "$cc_path" ]; then
+        echo -e "${YELLOW}⚠ cc command not found in PATH${NC}"
+        echo -e "  Please run: source $shell_rc"
+    elif [ "$cc_path" != "$BIN_DIR/cc" ]; then
+        echo -e "${YELLOW}⚠ cc command points to: $cc_path${NC}"
+        echo -e "  Expected: $BIN_DIR/cc"
+        echo -e "  Please run: source $shell_rc"
+    else
+        echo -e "${GREEN}✓ cc command correctly points to $BIN_DIR/cc${NC}"
+    fi
+    echo ""
+}
 print_success() {
     echo -e "${GREEN}═══════════════════════════════════════${NC}"
     echo -e "${GREEN}  Installation Complete!${NC}"
@@ -282,4 +312,5 @@ create_directories
 install_script
 create_config
 update_shell
+verify_installation
 print_success
