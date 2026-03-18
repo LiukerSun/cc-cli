@@ -96,7 +96,7 @@ notepad $env:USERPROFILE\.cc-config.json
 
 ```powershell
 # 测试配置
-cc --list
+ccc --list
 
 # 应该显示：
 ===================================
@@ -169,7 +169,7 @@ $config = @(
 )
 
 # 验证
-cc --list
+ccc --list
 ```
 
 ---
@@ -182,8 +182,8 @@ Remove-Item $env:USERPROFILE\.cc-config.json -Force
 irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 
 # 编辑配置文件
-cc -E
+ccc -E
 # 粘贴你的配置
 # 保存并测试
-cc --list
+ccc --list
 ```

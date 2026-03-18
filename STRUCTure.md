@@ -3,7 +3,7 @@
 ```
 cc-cli/
 ├── bin/
-│   └── cc                # 主脚本（核心功能)
+│   └── ccc               # 主脚本（核心功能)
 ├── docs/
 │   ├── configuration.md   # 配置文档
 │   ├── usage.md            # 使用指南
@@ -23,7 +23,7 @@ cc-cli/
 
 ## 文件说明
 
-- **bin/cc** - 主脚本，包含所有核心功能
+- **bin/ccc** - 主脚本，包含所有核心功能
 - **docs/** - 项目文档
   - `configuration.md` - 配置指南
   - `usage.md` - 使用示例

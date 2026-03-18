@@ -80,12 +80,12 @@ cd cc-cli
 
 ```bash
 # macOS/Linux
-cc --version
-cc --help
+ccc --version
+ccc --help
 
 # Windows PowerShell (不区分大小写)
-cc -version
-cc -help
+ccc -version
+ccc -help
 ```
 
 > 💡 Windows PowerShell 不区分大小写，`-V` 和 `-v`、`-U` 和 `-u` 等效果相同。
@@ -96,13 +96,13 @@ cc -help
 ### 查看所有模型
 
 ```bash
-cc --list
+ccc --list
 ```
 
 ### 交互式选择（推荐）
 
 ```bash
-cc
+ccc
 ```
 
 使用 ↑↓ 选择模型，按 Enter 确认。
@@ -110,25 +110,25 @@ cc
 ### 直接指定模型
 
 ```bash
-cc 2    # 使用模型 #2
+ccc 2    # 使用模型 #2
 ```
 
 ### 查看 API Keys
 
 ```bash
-cc -s    # 显示所有配置的 API keys（部分隐藏）
+ccc -s    # 显示所有配置的 API keys（部分隐藏）
 ```
 
 ### 编辑配置
 
 ```bash
-cc -E    # 用 vim 打开配置文件
+ccc -E    # 用 vim 打开配置文件
 ```
 
 ### 添加新模型
 
 ```bash
-cc -a    # 交互式添加新模型
+ccc -a    # 交互式添加新模型
 ```
 
 支持三种添加方式：
@@ -139,7 +139,7 @@ cc -a    # 交互式添加新模型
 #### ZHIPU AI 快速配置示例
 
 ```bash
-$ cc -a
+$ ccc -a
 Select provider:
   1) ZHIPU AI (智谱) - auto fetch models
   2) Alibaba Coding Plan (百炼) - auto fetch models
@@ -167,7 +167,7 @@ Model 'ZHIPU (GLM-4-Air)' added successfully!
 #### Alibaba Coding Plan (百炼) 快速配置示例
 
 ```bash
-$ cc -a
+$ ccc -a
 Select provider:
   1) ZHIPU AI (智谱) - auto fetch models
   2) Alibaba Coding Plan (百炼) - auto fetch models
@@ -202,33 +202,33 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 | 命令 | 说明 |
 |------|------|
 | `ccc` | 交互式选择模型并启动 Claude |
-| `cc -l, --list` | 列出所有可用模型 |
-| `cc -c, --current` | 显示当前使用的模型 |
-| `cc -V, --version` | 显示版本号 |
-| `cc -h, --help` | 显示帮助信息 |
+| `ccc -l, --list` | 列出所有可用模型 |
+| `ccc -c, --current` | 显示当前使用的模型 |
+| `ccc -V, --version` | 显示版本号 |
+| `ccc -h, --help` | 显示帮助信息 |
 
 ### 配置管理
 | 命令 | 说明 |
 |------|------|
-| `cc --edit` | 编辑配置文件 |
-| `cc -a, --add` | 交互式添加新模型 |
-| `cc -d, --delete N` | 删除模型 #N |
-| `cc -s, --show` | 查看 API keys（部分隐藏） |
-| `cc --validate` | 验证并修复配置文件 |
-| `cc -U, --upgrade` | 升级到最新版本 |
+| `ccc --edit` | 编辑配置文件 |
+| `ccc -a, --add` | 交互式添加新模型 |
+| `ccc -d, --delete N` | 删除模型 #N |
+| `ccc -s, --show` | 查看 API keys（部分隐藏） |
+| `ccc --validate` | 验证并修复配置文件 |
+| `ccc -U, --upgrade` | 升级到最新版本 |
 | `ccc --uninstall` | 卸载 cc-cli |
 
 ### 模型选择
 | 命令 | 说明 |
 |------|------|
-| `cc 2` | 直接使用模型 #2 启动 Claude |
-| `cc -y 3` | Bypass 模式 + 模型 #3 |
-| `cc 1 -- --help` | 传递参数给 Claude |
+| `ccc 2` | 直接使用模型 #2 启动 Claude |
+| `ccc -y 3` | Bypass 模式 + 模型 #3 |
+| `ccc 1 -- --help` | 传递参数给 Claude |
 
 ### 环境变量
 | 命令 | 说明 |
 |------|------|
-| `cc -e 2` | 仅设置环境变量，不启动 Claude |
+| `ccc -e 2` | 仅设置环境变量，不启动 Claude |
 
 ## ⚙ 交互式选择
 
@@ -312,7 +312,7 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 
 ```bash
 # 选择模型后启动 Claude
-cc 1  # 选择 qwen3.5-plus
+ccc 1  # 选择 qwen3.5-plus
 
 # 在 Claude Code 中创建 team
 /team 创建团队任务
@@ -338,10 +338,10 @@ cc 1  # 选择 qwen3.5-plus
 
 ```bash
 # 检查并升级到最新版本
-cc -U
+ccc -U
 
 # 或
-cc --upgrade
+ccc --upgrade
 ```
 
 升级功能会：
@@ -353,10 +353,10 @@ cc --upgrade
 
 ```bash
 # 使用 VS Code
-EDITOR=code cc -E
+EDITOR=code ccc -E
 
 # 使用 nano
-EDITOR=nano cc -E
+EDITOR=nano ccc -E
 
 # 永久修改
 echo 'export EDITOR=code' >> ~/.zshrc
@@ -367,30 +367,30 @@ source ~/.zshrc
 
 ```bash
 # 启动并启用 bypass
-cc -y 2
+ccc -y 2
 
 # 或
-cc --bypass 2
+ccc --bypass 2
 ```
 
 ### 传递参数给 Claude
 
 ```bash
 # 传递 --help
-cc 1 -- --help
+ccc 1 -- --help
 
 # 传递提示词
-cc 2 -- "Write a hello world program"
+ccc 2 -- "Write a hello world program"
 
 # 传递多个参数
-cc 3 -- --version --verbose
+ccc 3 -- --version --verbose
 ```
 
 ### 仅设置环境变量
 
 ```bash
 # 仅设置环境变量
-cc -e 2
+ccc -e 2
 
 # 然后手动启动
 source /tmp/cc-model-env.sh
@@ -411,14 +411,14 @@ claude
 ```bash
 # 备份并重新创建
 cp ~/.cc-config.json ~/.cc-config.json.backup
-cc --add
+ccc --add
 ```
 
 **3. 权限问题**
 ```bash
 # 确保安装目录权限
 chmod 755 ~/.cc-cli
-chmod +x ~/bin/cc
+chmod +x ~/bin/ccc
 ```
 
 **4. Subagent 不使用自定义模型**
@@ -443,8 +443,8 @@ Windows PowerShell 用户请参考 [Windows 故障排除指南](docs/windows-tro
 # 使用安装脚本
 ./install.sh --uninstall
 
-# 或使用 cc 命令
-cc --uninstall
+# 或使用 ccc 命令
+ccc --uninstall
 ```
 
 ### Windows
@@ -453,8 +453,8 @@ cc --uninstall
 # 使用安装脚本
 .\install.ps1 -Action uninstall
 
-# 或使用 cc 命令
-cc --uninstall
+# 或使用 ccc 命令
+ccc --uninstall
 ```
 
 卸载时会提示确认，并可选择：

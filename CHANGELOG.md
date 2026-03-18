@@ -45,8 +45,8 @@
   - API 端点：`https://coding.dashscope.aliyuncs.com/apps/anthropic`
 
 ### 变更
-- bin/cc - 添加 provider 选项 2) Alibaba Coding Plan
-- bin/cc.ps1 - 添加 Add-AlibabaCodingPlan 函数
+- bin/ccc - 添加 provider 选项 2) Alibaba Coding Plan
+- bin/ccc.ps1 - 添加 Add-AlibabaCodingPlan 函数
 - 更新交互提示，支持 3 个 provider 选项
 
 ## [1.3.4] - 2026-03-08
@@ -67,7 +67,7 @@
   - 在 `run_with_model` 函数中自动调用设置更新
 
 ### 修复
-- **Subagent 模型配置问题** - 解决 team 功能中 subagent 不使用 cc 脚本配置的模型变量的问题
+- **Subagent 模型配置问题** - 解决 team 功能中 subagent 不使用 ccc 脚本配置的模型变量的问题
   - 之前 subagent 使用硬编码的模型（如 haiku, claude-opus-4-6）
   - 现在通过写入 `~/.claude/settings.json` 的 `env` 字段，让 subagent 继承模型配置
   - 添加 `CLAUDE_CODE_MODEL` 和 `CLAUDE_CODE_SMALL_MODEL` 环境变量，让 Claude Code 的 subagent 使用自定义模型
@@ -82,22 +82,22 @@
 - **PowerShell 实现** - 使用 PowerShell 原生 JSON 处理，无外部依赖
 
 ### 变更
-- bin/cc - 添加 `update_claude_settings`、`create_default_settings`、`get_model_env_value` 函数
-- bin/cc - 修改 `run_with_model` 函数，在启动 Claude 前更新 settings.json
-- bin/cc - 添加 `CLAUDE_CODE_MODEL`、`CLAUDE_CODE_SMALL_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 环境变量导出
-- bin/cc - 修改 `update_claude_settings` 函数，自动禁用 Explore subagent 并设置 model 字段
-- bin/cc.ps1 - 添加 `Update-ClaudeSettings`、`Create-DefaultSettings`、`Get-ModelEnvValue` 函数
-- bin/cc.ps1 - 修改 `Run-WithModel` 函数，在启动 Claude 前更新 settings.json
-- bin/cc.ps1 - 添加 `CLAUDE_CODE_MODEL`、`CLAUDE_CODE_SMALL_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 环境变量导出
+- bin/ccc - 添加 `update_claude_settings`、`create_default_settings`、`get_model_env_value` 函数
+- bin/ccc - 修改 `run_with_model` 函数，在启动 Claude 前更新 settings.json
+- bin/ccc - 添加 `CLAUDE_CODE_MODEL`、`CLAUDE_CODE_SMALL_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 环境变量导出
+- bin/ccc - 修改 `update_claude_settings` 函数，自动禁用 Explore subagent 并设置 model 字段
+- bin/ccc.ps1 - 添加 `Update-ClaudeSettings`、`Create-DefaultSettings`、`Get-ModelEnvValue` 函数
+- bin/ccc.ps1 - 修改 `Run-WithModel` 函数，在启动 Claude 前更新 settings.json
+- bin/ccc.ps1 - 添加 `CLAUDE_CODE_MODEL`、`CLAUDE_CODE_SMALL_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 环境变量导出
 - docs/configuration.md - 添加 Team Subagent 模型配置说明文档
 
 ## [1.3.1] - 2026-03-04
 
 ### 修复
-- **配置文件损坏问题 (Issue #3)** - 修复运行 `cc -a` 时配置文件被破坏的问题
-  - Bash 版本 (bin/cc): 添加 `jq` 支持，改进纯 Bash 实现的 JSON 处理
-  - PowerShell 版本 (bin/cc.ps1): 添加 `ConvertTo-Hashtable` 函数，修复 PSCustomObject 序列化问题
-  - 之前运行 `cc -a` 会导致现有模型配置消失，出现无效的 "value" 和 "Count" 字段
+- **配置文件损坏问题 (Issue #3)** - 修复运行 `ccc -a` 时配置文件被破坏的问题
+  - Bash 版本 (bin/ccc): 添加 `jq` 支持，改进纯 Bash 实现的 JSON 处理
+  - PowerShell 版本 (bin/ccc.ps1): 添加 `ConvertTo-Hashtable` 函数，修复 PSCustomObject 序列化问题
+  - 之前运行 `ccc -a` 会导致现有模型配置消失，出现无效的 "value" 和 "Count" 字段
   - 现在正确保留所有现有配置，只追加新模型
 
 ### 改进
@@ -108,8 +108,8 @@
 - **兼容性** - 同时支持有 jq 和无 jq 的环境（Bash）；跨平台支持（Windows/macOS/Linux）
 
 ### 变更
-- bin/cc - 重写 `save_model_config` 函数，修复配置损坏问题
-- bin/cc.ps1 - 添加 `ConvertTo-Hashtable` 函数，修复 `Save-ModelConfig` 函数
+- bin/ccc - 重写 `save_model_config` 函数，修复配置损坏问题
+- bin/ccc.ps1 - 添加 `ConvertTo-Hashtable` 函数，修复 `Save-ModelConfig` 函数
 
 ## [1.3.0] - 2025-03-04
 
@@ -125,8 +125,8 @@
 - 详细的升级进度提示
 
 ### 变更
-- bin/cc - 添加 upgrade、check_latest_version、compare_versions 函数
-- bin/cc.ps1 - 添加 Upgrade-CC、Get-LatestVersion、Compare-Versions 函数
+- bin/ccc - 添加 upgrade、check_latest_version、compare_versions 函数
+- bin/ccc.ps1 - 添加 Upgrade-CC、Get-LatestVersion、Compare-Versions 函数
 - README.md - 添加升级功能文档和使用示例
 
 ## [1.2.0] - 2025-03-03
@@ -142,8 +142,8 @@
 ### 变更
 - install.sh - 从 VERSION 文件读取版本号
 - install.ps1 - 从 VERSION 文件读取版本号
-- bin/cc - 添加版本号读取和 delete_model 函数
-- bin/cc.ps1 - 添加版本号读取和 Remove-Model 函数
+- bin/ccc - 添加版本号读取和 delete_model 函数
+- bin/ccc.ps1 - 添加版本号读取和 Remove-Model 函数
 
 ## [1.1.0] - 2025-03-03
 
@@ -159,7 +159,7 @@
 ### 变更
 - install.ps1 - 添加 Save-FileNoBOM 辅助函数并改进包装器替换逻辑
 - fix-config.ps1 - 使用英文消息重写并正确处理 BOM 字节
-- bin/cc.ps1 - 添加 Save-JsonNoBOM 辅助函数并为所有 Get-Models 调用添加 @() 包装器
+- bin/ccc.ps1 - 添加 Save-JsonNoBOM 辅助函数并为所有 Get-Models 调用添加 @() 包装器
 
 ### Windows 兼容性
 - 改进与 Windows PowerShell 5.1 的兼容性

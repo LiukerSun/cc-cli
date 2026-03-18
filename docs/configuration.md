@@ -180,11 +180,11 @@ ccc --add
 ```bash
 # 确保安装目录权限
 chmod 755 ~/.cc-cli
-chmod +x ~/bin/cc
+chmod +x ~/bin/ccc
 ```
 
 ### Claude 未安装
-如果 Claude CLI 未安装，cc 仍然可以管理配置，但无法启动 Claude。
+如果 Claude CLI 未安装，ccc 仍然可以管理配置，但无法启动 Claude。
 
 安装 Claude: https://claude.ai
 
@@ -197,11 +197,11 @@ chmod +x ~/bin/cc
 
 当你使用 Claude Code 的 team 功能时，subagent 默认会使用硬编码的模型（如 `haiku` 或 `claude-opus-4-6`）。
 
-从 v1.3.3 开始，`cc` 脚本会在启动时自动更新 `~/.claude/settings.json` 文件，将当前选择的模型配置写入其中，这样 team subagent 也会使用相同的模型。
+从 v1.3.3 开始，`ccc` 脚本会在启动时自动更新 `~/.claude/settings.json` 文件，将当前选择的模型配置写入其中，这样 team subagent 也会使用相同的模型。
 
 ### 工作原理
 
-1. 当你运行 `cc [模型索引]` 时
+1. 当你运行 `ccc [模型索引]` 时
 2. 脚本会读取该模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 配置
 3. 自动更新 `~/.claude/settings.json` 的 `env` 字段
 4. Claude Code 启动时会读取这些环境变量，subagent 也会继承
@@ -227,6 +227,6 @@ ccc 1  # 选择阿里百炼 qwen3.5-plus
 
 ### 注意事项
 
-- 如果你手动编辑了 `~/.claude/settings.json`，下次运行 `cc` 时会被覆盖
+- 如果你手动编辑了 `~/.claude/settings.json`，下次运行 `ccc` 时会被覆盖
 - 如果需要在不同项目中使用不同模型，可以在项目根目录创建 `.claude/settings.local.json`
 - 此功能需要 `jq` 命令支持（macOS 和 Linux 默认已安装）
