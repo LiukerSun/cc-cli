@@ -201,7 +201,7 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 ### 基础命令
 | 命令 | 说明 |
 |------|------|
-| `cc` | 交互式选择模型并启动 Claude |
+| `ccc` | 交互式选择模型并启动 Claude |
 | `cc -l, --list` | 列出所有可用模型 |
 | `cc -c, --current` | 显示当前使用的模型 |
 | `cc -V, --version` | 显示版本号 |
@@ -216,7 +216,7 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 | `cc -s, --show` | 查看 API keys（部分隐藏） |
 | `cc --validate` | 验证并修复配置文件 |
 | `cc -U, --upgrade` | 升级到最新版本 |
-| `cc --uninstall` | 卸载 cc-cli |
+| `ccc --uninstall` | 卸载 cc-cli |
 
 ### 模型选择
 | 命令 | 说明 |
@@ -232,7 +232,7 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 
 ## ⚙ 交互式选择
 
-运行 `cc` 会显示交互式菜单：
+运行 `ccc` 会显示交互式菜单：
 
 ```
 ═══════════════════════════════════════
@@ -308,7 +308,7 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 
 ### Team Subagent 模型配置
 
-当你使用 Claude Code 的 team 功能时，subagent 会自动使用你在 `cc` 脚本中选择的模型。
+当你使用 Claude Code 的 team 功能时，subagent 会自动使用你在 `ccc` 脚本中选择的模型。
 
 ```bash
 # 选择模型后启动 Claude
@@ -321,7 +321,7 @@ cc 1  # 选择 qwen3.5-plus
 此时创建的 subagent 会使用 `qwen3.5-plus` 模型，而不是默认的 `haiku` 或 `claude-opus-4-6`。
 
 **工作原理：**
-- `cc` 脚本会自动更新 `~/.claude/settings.json` 文件
+- `ccc` 脚本会自动更新 `~/.claude/settings.json` 文件
 - 将当前模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 写入配置
 - 同时设置 `CLAUDE_CODE_MODEL`、`CLAUDE_CODE_SMALL_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 环境变量
 - Claude Code 启动时读取这些环境变量，subagent 也会继承
@@ -422,8 +422,8 @@ chmod +x ~/bin/cc
 ```
 
 **4. Subagent 不使用自定义模型**
-- 确保运行 `cc` 命令选择模型后启动 Claude
-- `cc` 会自动更新 `~/.claude/settings.json`
+- 确保运行 `ccc` 命令选择模型后启动 Claude
+- `ccc` 会自动更新 `~/.claude/settings.json`
 - 检查 `~/.claude/settings.json` 中是否有正确的环境变量配置
 
 **5. API 请求失败**

@@ -35,7 +35,7 @@ CC-CLI 的配置文件位于 `~/.cc-config.json`
 ### 方法 1：交互式添加（推荐）
 
 ```bash
-cc --add
+ccc --add
 ```
 
 按提示输入：
@@ -48,7 +48,7 @@ cc --add
 ### 方法 2：编辑配置文件
 
 ```bash
-cc --edit
+ccc --edit
 ```
 
 在 JSON 数组中添加新对象。
@@ -141,7 +141,7 @@ vim ~/.cc-config.json
 
 **配置方式：**
 ```bash
-cc -a
+ccc -a
 # 选择 2) Alibaba Coding Plan (百炼) - auto fetch models
 ```
 
@@ -158,13 +158,13 @@ cc -a
 
 ```bash
 # 查看所有模型
-cc --list
+ccc --list
 
 # 查看 API keys（部分隐藏)
-cc --show-keys
+ccc --show-keys
 
 # 查看当前模型
-cc --current
+ccc --current
 ```
 
 ## 故障排除
@@ -173,7 +173,7 @@ cc --current
 ```bash
 # 备份并重新创建
 cp ~/.cc-config.json ~/.cc-config.json.backup
-cc --add
+ccc --add
 ```
 
 ### 权限问题
@@ -210,7 +210,7 @@ chmod +x ~/bin/cc
 
 运行以下命令后：
 ```bash
-cc 1  # 选择阿里百炼 qwen3.5-plus
+ccc 1  # 选择阿里百炼 qwen3.5-plus
 ```
 
 `~/.claude/settings.json` 会被更新为：

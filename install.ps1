@@ -30,7 +30,7 @@ if ($scriptPath) {
 # Installation paths
 $INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
-$SCRIPT_FILE = "$env:USERPROFILE\bin\cc.ps1"
+$SCRIPT_FILE = "$env:USERPROFILE\bin\ccc.ps1"
 
 # Colors
 function Write-ColorOutput($ForegroundColor) {
@@ -100,13 +100,13 @@ function Create-Directories {
 
 # Download main script
 function Install-Script {
-    Write-Warning "Installing cc command (branch: $Branch)..."
+    Write-Warning "Installing ccc command (branch: $Branch)..."
     
-    $scriptUrl = "$REPO_URL/raw/$Branch/bin/cc.ps1"
+    $scriptUrl = "$REPO_URL/raw/$Branch/bin/ccc.ps1"
     $installScriptDest = "$INSTALL_DIR\install.ps1"
     
     if ($SCRIPT_DIR) {
-        $localScript = Join-Path $SCRIPT_DIR "bin\cc.ps1"
+        $localScript = Join-Path $SCRIPT_DIR "bin\ccc.ps1"
         
         if (Test-Path $localScript) {
             Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
@@ -120,7 +120,15 @@ function Install-Script {
                 Copy-Item -Path $localInstallScript -Destination $installScriptDest -Force
                 Write-Success "[OK] Installed uninstall script to $installScriptDest"
             }
-            Write-Success "[OK] Installed cc.ps1 from local source"
+            Write-Success "[OK] Installed ccc.ps1 from local source"
+
+            # Migrate from old 'cc' command name
+            $oldScript = Join-Path (Split-Path $SCRIPT_FILE -Parent) "cc.ps1"
+            if (Test-Path $oldScript) {
+                Remove-Item $oldScript -Force
+                Write-Success "[OK] Removed old 'cc.ps1' (now use 'ccc')"
+            }
+
             Write-Host ""
             return
         }
@@ -136,7 +144,7 @@ function Install-Script {
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
         
-        Write-Success "[OK] Downloaded cc.ps1 to $SCRIPT_FILE"
+        Write-Success "[OK] Downloaded ccc.ps1 to $SCRIPT_FILE"
         
         # Download install.ps1 for uninstall support
         $installScriptUrl = "$REPO_URL/raw/$Branch/install.ps1"
@@ -157,6 +165,13 @@ function Install-Script {
         } catch {
             Write-Warning "[!] Could not download VERSION file"
         }
+
+        # Migrate from old 'cc' command name
+        $oldScript = Join-Path (Split-Path $SCRIPT_FILE -Parent) "cc.ps1"
+        if (Test-Path $oldScript) {
+            Remove-Item $oldScript -Force
+            Write-Success "[OK] Removed old 'cc.ps1' (now use 'ccc')"
+        }
     } catch {
         Write-Error "[X] Failed to download script: $_"
         Write-Host "Please download manually from: $scriptUrl"
@@ -173,7 +188,7 @@ function Create-Config {
         
         Save-FileNoBOM -Path $CONFIG_FILE -Content "[]"
         Write-Success "[OK] Created empty config file: $CONFIG_FILE"
-        Write-Warning "  Run 'cc -a' to add your first model"
+        Write-Warning "  Run 'ccc -a' to add your first model"
     } else {
         Write-Success "[OK] Config file already exists: $CONFIG_FILE"
     }
@@ -203,8 +218,8 @@ function Create-Wrapper {
     
     $wrapperContent = @'
 # CC-CLI PowerShell Wrapper
-function cc {
-    & "$env:USERPROFILE\bin\cc.ps1" @args
+function ccc {
+    & "$env:USERPROFILE\bin\ccc.ps1" @args
 }
 '@
     
@@ -216,7 +231,7 @@ function cc {
     # Remove old wrapper if exists
     if (Test-Path $PROFILE) {
         $profileContent = Get-Content $PROFILE -Raw
-        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function cc \{.*?\}'
+        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function ccc \{.*?\}'
         $profileContent = $profileContent -replace $pattern, ''
         $profileContent = $profileContent.TrimEnd()
         
@@ -227,7 +242,7 @@ function cc {
     
     # Add new wrapper
     Add-Content -Path $PROFILE -Value "`n`n$wrapperContent"
-    Write-Success "[OK] Added cc function to PowerShell profile"
+    Write-Success "[OK] Added ccc function to PowerShell profile"
     Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
     Write-Host ""
 }
@@ -244,7 +259,7 @@ function Print-Success {
     Write-Host "  1. " -NoNewline
     Write-Warning "Add your API keys:"
     Write-Host "     " -NoNewline
-    Write-Info "cc -E"
+    Write-Info "ccc -E"
     Write-Host ""
     Write-Host "  2. " -NoNewline
     Write-Warning "Restart PowerShell or run:"
@@ -252,13 +267,13 @@ function Print-Success {
     Write-Info ". `$PROFILE"
     Write-Host ""
     Write-Host "  3. " -NoNewline
-    Write-Warning "Start using cc:"
+    Write-Warning "Start using ccc:"
     Write-Host "     " -NoNewline
-    Write-Info "cc              # Interactive selection"
+    Write-Info "ccc              # Interactive selection"
     Write-Host "     " -NoNewline
-    Write-Info "cc --list       # List all models"
+    Write-Info "ccc --list       # List all models"
     Write-Host "     " -NoNewline
-    Write-Info "cc --help       # Show help"
+    Write-Info "ccc --help       # Show help"
     Write-Host ""
     Write-Info "Documentation:"
     Write-Host "  $REPO_URL"
@@ -400,17 +415,17 @@ function Uninstall {
     Write-Warning "Cleaning PowerShell profile..."
     if (Test-Path $PROFILE) {
         $profileContent = Get-Content $PROFILE -Raw
-        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function cc \{.*?\}'
+        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function ccc \{.*?\}'
         $newContent = $profileContent -replace $pattern, ''
         $newContent = $newContent.TrimEnd()
         
         if ($newContent -ne $profileContent) {
             $utf8NoBom = New-Object System.Text.UTF8Encoding $false
             [System.IO.File]::WriteAllText($PROFILE, $newContent, $utf8NoBom)
-            Write-Success "[OK] Removed cc function from $PROFILE"
+            Write-Success "[OK] Removed ccc function from $PROFILE"
             Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
         } else {
-            Write-Warning "[!] No cc function found in profile"
+            Write-Warning "[!] No ccc function found in profile"
         }
     } else {
         Write-Warning "[!] PowerShell profile not found"

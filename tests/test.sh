@@ -17,7 +17,7 @@ echo "Running cc-cli tests..."
 
 # Test help
 echo -e "${YELLOW}Testing: --help${NC}"
-if ! ~/bin/cc --help | grep -q "Usage:"; then
+if ! ~/bin/ccc --help | grep -q "Usage:"; then
     echo -e "${GREEN}✓ --help works${NC}"
 else
     echo -e "${RED}✗ --help failed${NC}"
@@ -28,7 +28,7 @@ echo ""
 
 # Test --list
 echo -e "${YELLOW}Testing: --list${NC}"
-if ! ~/bin/cc --list | grep -q "Available AI Models"; then
+if ! ~/bin/ccc --list | grep -q "Available AI Models"; then
     echo -e "${GREEN}✓ --list works${NC}"
 else
     echo -e "${RED}✗ --list failed${NC}"
@@ -38,7 +38,7 @@ echo ""
 
 # Test --current (no model selected yet)
 echo -e "${YELLOW}Testing: --current (no model)${NC}"
-if ~/bin/cc --current | grep -q "Current model:"; then
+if ~/bin/ccc --current | grep -q "Current model:"; then
     echo -e "${GREEN}✓ --current works${NC}"
 else
     echo -e "${YELLOW}No model selected${NC}"
@@ -47,7 +47,7 @@ echo ""
 
 # Test --show-keys
 echo -e "${YELLOW}Testing: --show-keys${NC}"
-if ! ~/bin/cc --show-keys | grep -q "API Keys"; then
+if ! ~/bin/ccc --show-keys | grep -q "API Keys"; then
     echo -e "${GREEN}✓ --show-keys works${NC}"
 else
     echo -e "${RED}✗ --show-keys failed${NC}"

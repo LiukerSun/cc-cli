@@ -67,28 +67,35 @@ create_directories() {
 
 # Install main script
 install_script() {
-    echo -e "${YELLOW}Installing cc command...${NC}"
+    echo -e "${YELLOW}Installing ccc command...${NC}"
     
     # Download or copy the script
-    if [ -f "./bin/cc" ]; then
+    if [ -f "./bin/ccc" ]; then
         # Local installation
-        cp ./bin/cc "$BIN_DIR/cc"
+        cp ./bin/ccc "$BIN_DIR/ccc"
         cp ./install.sh "$INSTALL_DIR/install.sh"
         if [ -f "./VERSION" ]; then
             cp ./VERSION "$INSTALL_DIR/VERSION"
         fi
     else
         # Remote installation
-        curl -fsSL "$REPO_URL/raw/main/bin/cc" -o "$BIN_DIR/cc"
+        curl -fsSL "$REPO_URL/raw/main/bin/ccc" -o "$BIN_DIR/ccc"
         curl -fsSL "$REPO_URL/raw/main/install.sh" -o "$INSTALL_DIR/install.sh"
         curl -fsSL "$REPO_URL/raw/main/VERSION" -o "$INSTALL_DIR/VERSION"
     fi
     
-    chmod +x "$BIN_DIR/cc"
+    chmod +x "$BIN_DIR/ccc"
     chmod +x "$INSTALL_DIR/install.sh"
     
-    echo -e "${GREEN}✓ Installed cc to $BIN_DIR/cc${NC}"
+    echo -e "${GREEN}✓ Installed ccc to $BIN_DIR/ccc${NC}"
     echo -e "${GREEN}✓ Installed uninstall script to $INSTALL_DIR/install.sh${NC}"
+
+    # Migrate from old 'cc' command name
+    if [ -f "$BIN_DIR/cc" ] && head -1 "$BIN_DIR/cc" | grep -q "bash"; then
+        rm -f "$BIN_DIR/cc"
+        echo -e "${GREEN}✓ Removed old 'cc' command (now use 'ccc')${NC}"
+    fi
+
     echo ""
 }
 
@@ -99,7 +106,7 @@ create_config() {
         
         echo "[]" > "$CONFIG_FILE"
         echo -e "${GREEN}✓ Created empty config file: $CONFIG_FILE${NC}"
-        echo -e "${YELLOW}  Run 'cc -a' to add your first model${NC}"
+        echo -e "${YELLOW}  Run 'ccc -a' to add your first model${NC}"
     else
         echo -e "${GREEN}✓ Config file already exists: $CONFIG_FILE${NC}"
     fi
@@ -144,17 +151,17 @@ verify_installation() {
     # Update PATH for current session
     export PATH="$HOME/bin:$PATH"
     
-    # Check if cc command exists and points to correct location
-    local cc_path=$(command -v cc 2>/dev/null)
+    # Check if ccc command exists and points to correct location
+    local cc_path=$(command -v ccc 2>/dev/null)
     if [ -z "$cc_path" ]; then
-        echo -e "${YELLOW}⚠ cc command not found in PATH${NC}"
+        echo -e "${YELLOW}⚠ ccc command not found in PATH${NC}"
         echo -e "  Please run: source $shell_rc"
-    elif [ "$cc_path" != "$BIN_DIR/cc" ]; then
-        echo -e "${YELLOW}⚠ cc command points to: $cc_path${NC}"
-        echo -e "  Expected: $BIN_DIR/cc"
+    elif [ "$cc_path" != "$BIN_DIR/ccc" ]; then
+        echo -e "${YELLOW}⚠ ccc command points to: $cc_path${NC}"
+        echo -e "  Expected: $BIN_DIR/ccc"
         echo -e "  Please run: source $shell_rc"
     else
-        echo -e "${GREEN}✓ cc command correctly points to $BIN_DIR/cc${NC}"
+        echo -e "${GREEN}✓ ccc command correctly points to $BIN_DIR/ccc${NC}"
     fi
     echo ""
 }
@@ -166,15 +173,15 @@ print_success() {
     echo -e "${BLUE}Next steps:${NC}"
     echo ""
     echo -e "  1. ${YELLOW}Add your API keys:${NC}"
-    echo -e "     ${BLUE}cc -E${NC}"
+    echo -e "     ${BLUE}ccc -E${NC}"
     echo ""
     echo -e "  2. ${YELLOW}Reload your shell:${NC}"
     echo -e "     ${BLUE}source ~/.zshrc${NC}  # or ~/.bashrc"
     echo ""
-    echo -e "  3. ${YELLOW}Start using cc:${NC}"
-    echo -e "     ${BLUE}cc${NC}              # Interactive selection"
-    echo -e "     ${BLUE}cc --list${NC}       # List all models"
-    echo -e "     ${BLUE}cc --help${NC}       # Show help"
+    echo -e "  3. ${YELLOW}Start using ccc:${NC}"
+    echo -e "     ${BLUE}ccc${NC}              # Interactive selection"
+    echo -e "     ${BLUE}ccc --list${NC}       # List all models"
+    echo -e "     ${BLUE}ccc --help${NC}       # Show help"
     echo ""
     echo -e "${BLUE}Documentation:${NC}"
     echo -e "  $REPO_URL"
@@ -201,11 +208,11 @@ uninstall() {
     echo -e "${YELLOW}Removing files...${NC}"
     
     # Remove main script
-    if [ -f "$BIN_DIR/cc" ]; then
-        rm -f "$BIN_DIR/cc"
-        echo -e "${GREEN}✓ Removed $BIN_DIR/cc${NC}"
+    if [ -f "$BIN_DIR/ccc" ]; then
+        rm -f "$BIN_DIR/ccc"
+        echo -e "${GREEN}✓ Removed $BIN_DIR/ccc${NC}"
     else
-        echo -e "${YELLOW}✗ Script file not found: $BIN_DIR/cc${NC}"
+        echo -e "${YELLOW}✗ Script file not found: $BIN_DIR/ccc${NC}"
     fi
     
     # Remove installation directory
