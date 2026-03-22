@@ -221,14 +221,14 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 ### 模型选择
 | 命令 | 说明 |
 |------|------|
-| `ccc 2` | 直接使用模型 #2 启动 Claude |
+| `ccc 2` | 直接使用模型 #2 启动对应 CLI |
 | `ccc -y 3` | Bypass 模式 + 模型 #3 |
-| `ccc 1 -- --help` | 传递参数给 Claude |
+| `ccc 1 -- --help` | 传递参数给目标 CLI |
 
 ### 环境变量
 | 命令 | 说明 |
 |------|------|
-| `ccc -e 2` | 仅设置环境变量，不启动 Claude |
+| `ccc -e 2` | 仅设置环境变量，不启动目标 CLI |
 
 ## ⚙ 交互式选择
 
@@ -269,6 +269,7 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 [
     {
         "name": "模型名称",
+        "command": "可选，默认 claude；使用 Codex 时填 codex",
         "env": {
             "ANTHROPIC_BASE_URL": "API地址",
             "ANTHROPIC_AUTH_TOKEN": "API密钥",
@@ -278,6 +279,9 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
     }
 ]
 ```
+
+`ccc -a` 的 `codex` 分支会使用内置的 OpenAI/Codex 模型列表供选择，不请求远端 `/models`；如果需要特殊模型，也可以手动输入自定义模型 ID。
+除 `OpenAI Codex` 选项外，其余新增入口默认都是 Claude-compatible 配置。
 
 ### 示例配置
 
@@ -294,11 +298,20 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
     },
     {
         "name": "OpenAI GPT-4",
+        "command": "codex",
         "env": {
-            "ANTHROPIC_BASE_URL": "https://api.openai.com/v1",
-            "ANTHROPIC_AUTH_TOKEN": "sk-xxxxx",
-            "ANTHROPIC_MODEL": "gpt-4o",
-            "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4o-mini"
+            "OPENAI_BASE_URL": "https://api.openai.com/v1",
+            "OPENAI_API_KEY": "sk-xxxxx",
+            "OPENAI_MODEL": "gpt-4o"
+        }
+    },
+    {
+        "name": "Codex (API易)",
+        "command": "codex",
+        "env": {
+            "OPENAI_BASE_URL": "https://vip.apiyi.com/v1",
+            "OPENAI_API_KEY": "sk-xxxxx",
+            "OPENAI_MODEL": "o3"
         }
     }
 ]
@@ -306,9 +319,9 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 
 ## 🔧 高级用法
 
-### Team Subagent 模型配置
+### Claude Team Subagent 模型配置
 
-当你使用 Claude Code 的 team 功能时，subagent 会自动使用你在 `ccc` 脚本中选择的模型。
+当你使用 Claude Code 的 team 功能，且在 `ccc` 中选择的是 `claude` 配置时，subagent 会自动使用你在脚本中选择的模型。
 
 ```bash
 # 选择模型后启动 Claude
@@ -373,7 +386,7 @@ ccc -y 2
 ccc --bypass 2
 ```
 
-### 传递参数给 Claude
+### 传递参数给目标 CLI
 
 ```bash
 # 传递 --help
@@ -493,4 +506,3 @@ ccc --uninstall
 <div align="center">
   Made with ❤️ by the community
 </div>
-

@@ -12,6 +12,7 @@ CC-CLI 的配置文件位于 `~/.cc-config.json`
 [
     {
         "name": "模型显示名称",
+        "command": "可选，默认 claude；使用 Codex 时填 codex",
         "env": {
             "ANTHROPIC_BASE_URL": "API 端点 URL",
             "ANTHROPIC_AUTH_TOKEN": "API 密钥",
@@ -25,10 +26,16 @@ CC-CLI 的配置文件位于 `~/.cc-config.json`
 ## 必需字段
 
 - `name` - 模型的显示名称（必填）
+- `command` - 启动命令（可选，默认 `claude`）
+- `command = "claude"` 时：
 - `env.ANTHROPIC_BASE_URL` - API 端点 URL（必填）
 - `env.ANTHROPIC_AUTH_TOKEN` - API 密钥（必填）
 - `env.ANTHROPIC_MODEL` - 主模型 ID（必填）
 - `env.ANTHROPIC_SMALL_FAST_MODEL` - 快速模型 ID（可选，默认与主模型相同)
+- `command = "codex"` 时：
+- `env.OPENAI_BASE_URL` - API 端点 URL（必填）
+- `env.OPENAI_API_KEY` - API 密钥（必填）
+- `env.OPENAI_MODEL` - 主模型 ID（必填）
 
 ## 添加新模型
 
@@ -39,11 +46,11 @@ ccc --add
 ```
 
 按提示输入：
-- 模型名称
-- API 端点 URL
-- API 密钥
-- 主模型 ID
-- 快速模型 ID（可选）
+- 提供商或手动配置
+- 所需的 API 端点 URL / API 密钥
+- 模型选择信息
+
+当选择 `codex` 时，交互流程会使用内置的 OpenAI/Codex 模型列表供选择，不请求远端 `/models`；如果需要特殊模型，也可以手动输入自定义模型 ID。
 
 ### 方法 2：编辑配置文件
 
@@ -82,11 +89,25 @@ vim ~/.cc-config.json
 ```json
 {
     "name": "OpenAI GPT-4",
+    "command": "codex",
     "env": {
-        "ANTHROPIC_BASE_URL": "https://api.openai.com/v1",
-        "ANTHROPIC_AUTH_TOKEN": "sk-xxxxx",
-        "ANTHROPIC_MODEL": "gpt-4o",
-        "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4o-mini"
+        "OPENAI_BASE_URL": "https://api.openai.com/v1",
+        "OPENAI_API_KEY": "sk-xxxxx",
+        "OPENAI_MODEL": "gpt-4o"
+    }
+}
+```
+
+### OpenAI Codex CLI + 第三方中转
+
+```json
+{
+    "name": "Codex (API易)",
+    "command": "codex",
+    "env": {
+        "OPENAI_API_KEY": "sk-xxxxx",
+        "OPENAI_BASE_URL": "https://vip.apiyi.com/v1",
+        "OPENAI_MODEL": "o3"
     }
 }
 ```
@@ -184,9 +205,9 @@ chmod +x ~/bin/ccc
 ```
 
 ### Claude 未安装
-如果 Claude CLI 未安装，ccc 仍然可以管理配置，但无法启动 Claude。
+如果目标 CLI 未安装，ccc 仍然可以管理配置，但无法启动对应命令。
 
-安装 Claude: https://claude.ai
+例如安装 Claude: https://claude.ai
 
 ## 灵活配置
 - 可以添加任意兼容 Anthropic API 的端点
@@ -201,7 +222,7 @@ chmod +x ~/bin/ccc
 
 ### 工作原理
 
-1. 当你运行 `ccc [模型索引]` 时
+1. 当你运行 `ccc [模型索引]` 且所选 `command` 为 `claude` 时
 2. 脚本会读取该模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 配置
 3. 自动更新 `~/.claude/settings.json` 的 `env` 字段
 4. Claude Code 启动时会读取这些环境变量，subagent 也会继承

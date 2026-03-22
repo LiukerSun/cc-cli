@@ -10,11 +10,11 @@
     },
     {
         "name": "OpenAI GPT-4",
+        "command": "codex",
         "env": {
-            "ANTHROPIC_BASE_URL": "https://api.openai.com/v1",
-            "ANTHROPIC_AUTH_TOKEN": "your-api-key-here",
-            "ANTHROPIC_MODEL": "gpt-4o",
-            "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4o-mini"
+            "OPENAI_BASE_URL": "https://api.openai.com/v1",
+            "OPENAI_API_KEY": "your-api-key-here",
+            "OPENAI_MODEL": "gpt-4o"
         }
     },
     {

@@ -10,6 +10,7 @@ if (Test-Path $VERSION_FILE) {
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
 $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
 $CLAUDE_SETTINGS_FILE = "$env:USERPROFILE\.claude\settings.json"
+$CODEX_CONFIG_FILE = "$env:USERPROFILE\.codex\config.toml"
 
 function Save-JsonNoBOM {
     param(
@@ -22,10 +23,137 @@ function Save-JsonNoBOM {
     [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
 }
 
+function Get-ModelCommand {
+    param(
+        [object]$Model
+    )
+
+    if ($Model -and $Model.command) {
+        return [string]$Model.command
+    }
+
+    return "claude"
+}
+
+function Get-ModelConfigKeys {
+    param(
+        [string]$Command
+    )
+
+    if ($Command -eq "codex") {
+        return @{
+            BaseUrl = "OPENAI_BASE_URL"
+            ApiKey = "OPENAI_API_KEY"
+            MainModel = "OPENAI_MODEL"
+            FastModel = "OPENAI_SMALL_FAST_MODEL"
+        }
+    }
+
+    return @{
+        BaseUrl = "ANTHROPIC_BASE_URL"
+        ApiKey = "ANTHROPIC_AUTH_TOKEN"
+        MainModel = "ANTHROPIC_MODEL"
+        FastModel = "ANTHROPIC_SMALL_FAST_MODEL"
+    }
+}
+
+function Get-EnvEntryValue {
+    param(
+        [object]$EnvObject,
+        [string]$KeyName
+    )
+
+    if ($null -eq $EnvObject) {
+        return $null
+    }
+
+    if ($EnvObject -is [hashtable]) {
+        return $EnvObject[$KeyName]
+    }
+
+    $property = $EnvObject.PSObject.Properties[$KeyName]
+    if ($property) {
+        return $property.Value
+    }
+
+    return $null
+}
+
+function Get-EnvEntries {
+    param(
+        [object]$EnvObject
+    )
+
+    if ($null -eq $EnvObject) {
+        return @()
+    }
+
+    $entries = @()
+    if ($EnvObject -is [hashtable]) {
+        foreach ($key in $EnvObject.Keys) {
+            $entries += [PSCustomObject]@{
+                Name = $key
+                Value = $EnvObject[$key]
+            }
+        }
+    } else {
+        foreach ($property in $EnvObject.PSObject.Properties) {
+            $entries += [PSCustomObject]@{
+                Name = $property.Name
+                Value = $property.Value
+            }
+        }
+    }
+
+    return $entries
+}
+
+function Test-ModelConfigEntry {
+    param(
+        [object]$Item,
+        [ref]$MissingFields
+    )
+
+    $missing = @()
+
+    if (-not $Item.name) {
+        $missing += "name"
+    }
+
+    if (-not $Item.env) {
+        $missing += "env"
+    } else {
+        $command = Get-ModelCommand -Model $Item
+        $keys = Get-ModelConfigKeys -Command $command
+
+        if (-not (Get-EnvEntryValue -EnvObject $Item.env -KeyName $keys.BaseUrl)) { $missing += $keys.BaseUrl }
+        if (-not (Get-EnvEntryValue -EnvObject $Item.env -KeyName $keys.ApiKey)) { $missing += $keys.ApiKey }
+        if (-not (Get-EnvEntryValue -EnvObject $Item.env -KeyName $keys.MainModel)) { $missing += $keys.MainModel }
+    }
+
+    if ($PSBoundParameters.ContainsKey("MissingFields")) {
+        $MissingFields.Value = $missing
+    }
+
+    return $missing.Count -eq 0
+}
+
+function Get-BypassFlag {
+    param(
+        [string]$Command
+    )
+
+    if ($Command -eq "codex") {
+        return "--dangerously-bypass-approvals-and-sandbox"
+    }
+
+    return "--dangerously-skip-permissions"
+}
+
 function Show-Help {
-    Write-Host "Usage: ccc [OPTIONS] [MODEL_INDEX] [-- CLAUDE_ARGS...]"
+    Write-Host "Usage: ccc [OPTIONS] [MODEL_INDEX] [-- CLI_ARGS...]"
     Write-Host ""
-    Write-Host "Start Claude with selected model configuration."
+    Write-Host "Start the configured AI CLI with the selected model configuration."
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  -y, --bypass      Enable bypass permissions"
@@ -42,13 +170,13 @@ function Show-Help {
     Write-Host "  --uninstall       Uninstall cc-cli"
     Write-Host "  -h, --help        Show this help message"
     Write-Host ""
-    Write-Host "Note: This command also updates ~/.claude/settings.json with the selected"
-    Write-Host "      model to ensure team subagents use the same model configuration."
+    Write-Host "Note: When the selected command is 'claude', this command also updates"
+    Write-Host "      ~/.claude/settings.json so team subagents use the same model."
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  ccc              Interactive model selection"
-    Write-Host "  ccc 2            Start Claude with model #2"
-    Write-Host "  ccc -y 3         Start Claude with model #3 and bypass"
+    Write-Host "  ccc 2            Start the configured CLI with model #2"
+    Write-Host "  ccc -y 3         Start the configured CLI with model #3 and bypass"
     Write-Host "  ccc -E           Edit configuration file"
     Write-Host "  ccc -a           Add a new model"
     Write-Host "  ccc -d 2         Delete model #2"
@@ -214,12 +342,7 @@ function Test-ConfigValid {
     $configArray = @($Config)
     
     foreach ($item in $configArray) {
-        if (-not $item.name) { return $false }
-        if (-not $item.env) { return $false }
-        if (-not $item.env.ANTHROPIC_BASE_URL) { return $false }
-        if (-not $item.env.ANTHROPIC_AUTH_TOKEN) { return $false }
-        if (-not $item.env.ANTHROPIC_MODEL) { return $false }
-        if (-not $item.env.ANTHROPIC_SMALL_FAST_MODEL) { return $false }
+        if (-not (Test-ModelConfigEntry -Item $item)) { return $false }
     }
     
     return $true
@@ -234,15 +357,7 @@ function Repair-Config {
     $configArray = @($Config)
     
     foreach ($item in $configArray) {
-        if ($item.name -and $item.env -and 
-            $item.env.ANTHROPIC_BASE_URL -and 
-            $item.env.ANTHROPIC_AUTH_TOKEN -and 
-            $item.env.ANTHROPIC_MODEL) {
-            
-            if (-not $item.env.ANTHROPIC_SMALL_FAST_MODEL) {
-                $item.env.ANTHROPIC_SMALL_FAST_MODEL = $item.env.ANTHROPIC_MODEL
-            }
-            
+        if (Test-ModelConfigEntry -Item $item) {
             $validModels += $item
         }
     }
@@ -338,8 +453,10 @@ function Show-Keys {
         if (-not $model.name) { continue }
         $hasModels = $true
         $num = $i + 1
+        $command = Get-ModelCommand -Model $model
+        $keys = Get-ModelConfigKeys -Command $command
         
-        $key = $model.env.ANTHROPIC_AUTH_TOKEN
+        $key = [string](Get-EnvEntryValue -EnvObject $model.env -KeyName $keys.ApiKey)
         $maskedKey = if ($key.Length -gt 12) { 
             $key.Substring(0,8) + "..." + $key.Substring($key.Length - 4) 
         } else { 
@@ -347,7 +464,8 @@ function Show-Keys {
         }
         
         Write-Host "$num) $($model.name)" -ForegroundColor Cyan
-        Write-Host "   URL: $($model.env.ANTHROPIC_BASE_URL)"
+        Write-Host "   Command: $command"
+        Write-Host "   URL: $(Get-EnvEntryValue -EnvObject $model.env -KeyName $keys.BaseUrl)"
         Write-Host "   Key: $maskedKey" -ForegroundColor Gray
         Write-Host ""
     }
@@ -432,10 +550,12 @@ function Validate-Config {
             continue
         }
         
+        $command = Get-ModelCommand -Model $item
+        $keys = Get-ModelConfigKeys -Command $command
         $missingFields = @()
-        if (-not $item.env.ANTHROPIC_BASE_URL) { $missingFields += "ANTHROPIC_BASE_URL" }
-        if (-not $item.env.ANTHROPIC_AUTH_TOKEN) { $missingFields += "ANTHROPIC_AUTH_TOKEN" }
-        if (-not $item.env.ANTHROPIC_MODEL) { $missingFields += "ANTHROPIC_MODEL" }
+        if (-not (Get-EnvEntryValue -EnvObject $item.env -KeyName $keys.BaseUrl)) { $missingFields += $keys.BaseUrl }
+        if (-not (Get-EnvEntryValue -EnvObject $item.env -KeyName $keys.ApiKey)) { $missingFields += $keys.ApiKey }
+        if (-not (Get-EnvEntryValue -EnvObject $item.env -KeyName $keys.MainModel)) { $missingFields += $keys.MainModel }
         
         if ($missingFields.Count -gt 0) {
             $errors += "Entry #$num ($($item.name)): missing fields: $($missingFields -join ', ')"
@@ -489,22 +609,95 @@ function Add-Model {
     Write-Host "==================================="
     Write-Host ""
     Write-Host "Select provider:"
-    Write-Host "  1) ZHIPU AI - auto fetch models"
-    Write-Host "  2) Alibaba Coding Plan - auto fetch models"
-    Write-Host "  3) Manual input"
+    Write-Host "  1) ZHIPU AI - Claude-compatible provider"
+    Write-Host "  2) Alibaba Coding Plan - Claude-compatible provider"
+    Write-Host "  3) OpenAI Codex"
+    Write-Host "  4) Manual input (Claude-compatible)"
     Write-Host ""
 
-    $choice = Read-Host "Choice [1-3]"
+    $choice = Read-Host "Choice [1-4]"
 
     switch ($choice) {
         "1" { Add-ZhipuModel }
         "2" { Add-AlibabaCodingPlan }
-        "3" { Add-ManualModel }
+        "3" { Add-CodexModel }
+        "4" { Add-ManualModel -PresetCommand "claude" }
         default {
             Write-Error "Invalid choice"
             exit 1
         }
     }
+}
+
+function Get-SupportedCodexModels {
+    return @(
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.3-codex",
+        "gpt-5.3-codex-spark",
+        "gpt-5.2-codex",
+        "gpt-5.2",
+        "gpt-5.1-codex-max",
+        "gpt-5.1",
+        "gpt-5.1-codex",
+        "gpt-5",
+        "gpt-5-codex",
+        "gpt-5-codex-mini"
+    )
+}
+
+function Add-CodexModel {
+    Write-Host ""
+    Write-Host "==================================="
+    Write-Host "  OpenAI-Compatible Codex Configuration" -ForegroundColor Cyan
+    Write-Host "==================================="
+    Write-Host ""
+
+    $baseUrl = Read-Host "API Base URL (e.g., https://api.openai.com/v1)"
+    if (-not $baseUrl) {
+        Write-Error "Base URL is required"
+        exit 1
+    }
+
+    $apiKey = Read-Host "API Key"
+    if (-not $apiKey) {
+        Write-Error "API Key is required"
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "Using built-in OpenAI/Codex model list"
+    Write-Host ""
+
+    $models = @(Get-SupportedCodexModels) + @("Custom model ID")
+
+    Write-Host "Available Models:"
+    Write-Host ""
+    for ($i = 0; $i -lt $models.Count; $i++) {
+        Write-Host "  $($i + 1)) $($models[$i])"
+    }
+    Write-Host ""
+
+    $mainIdx = Read-Host "Select model [1-$($models.Count)]"
+    if (-not ($mainIdx -match "^\d+$") -or [int]$mainIdx -lt 1 -or [int]$mainIdx -gt $models.Count) {
+        Write-Error "Invalid selection"
+        exit 1
+    }
+    $mainModel = $models[[int]$mainIdx - 1]
+    if ($mainModel -eq "Custom model ID") {
+        $mainModel = Read-Host "Custom model ID"
+        if (-not $mainModel) {
+            Write-Error "Model ID is required"
+            exit 1
+        }
+    }
+
+    $name = Read-Host "Display name (default: Codex ($mainModel))"
+    if (-not $name) {
+        $name = "Codex ($mainModel)"
+    }
+
+    Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel "" -Command "codex"
 }
 
 function Add-ZhipuModel {
@@ -665,9 +858,17 @@ function Add-AlibabaCodingPlan {
 }
 
 function Add-ManualModel {
+    param(
+        [string]$PresetCommand = ""
+    )
+
     Write-Host ""
     Write-Host "==================================="
-    Write-Host "  Manual Configuration" -ForegroundColor Cyan
+    if ($PresetCommand) {
+        Write-Host "  Manual Configuration ($PresetCommand)" -ForegroundColor Cyan
+    } else {
+        Write-Host "  Manual Configuration" -ForegroundColor Cyan
+    }
     Write-Host "==================================="
     Write-Host ""
     
@@ -675,6 +876,14 @@ function Add-ManualModel {
     if (-not $name) {
         Write-Error "Name is required"
         exit 1
+    }
+
+    $command = $PresetCommand
+    if (-not $command) {
+        $command = Read-Host "Command (default: claude, e.g., claude/codex)"
+        if (-not $command) {
+            $command = "claude"
+        }
     }
     
     Write-Host ""
@@ -691,18 +900,21 @@ function Add-ManualModel {
         exit 1
     }
     
-    $mainModel = Read-Host "Main Model (e.g., 'gpt-4')"
+    $mainModel = Read-Host "Main Model (e.g., 'gpt-4' or 'o3')"
     if (-not $mainModel) {
         Write-Error "Model name is required"
         exit 1
     }
     
-    $fastModel = Read-Host "Fast Model (optional, press Enter to use main model)"
-    if (-not $fastModel) {
-        $fastModel = $mainModel
+    $fastModel = ""
+    if ($command -ne "codex") {
+        $fastModel = Read-Host "Fast Model (optional, press Enter to use main model)"
+        if (-not $fastModel) {
+            $fastModel = $mainModel
+        }
     }
     
-    Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel
+    Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel $fastModel -Command $command
 }
 
 function ConvertTo-Hashtable {
@@ -740,7 +952,8 @@ function Save-ModelConfig {
         [string]$BaseUrl,
         [string]$ApiKey,
         [string]$MainModel,
-        [string]$FastModel
+        [string]$FastModel,
+        [string]$Command = "claude"
     )
     
     $config = @()
@@ -754,14 +967,22 @@ function Save-ModelConfig {
         }
     }
     
+    $keys = Get-ModelConfigKeys -Command $Command
+    $envConfig = @{
+        ($keys.BaseUrl) = $BaseUrl
+        ($keys.ApiKey) = $ApiKey
+        ($keys.MainModel) = $MainModel
+    }
+    if ($FastModel) {
+        $envConfig[$keys.FastModel] = $FastModel
+    }
+
     $newModel = @{
         name = $Name
-        env = @{
-            ANTHROPIC_BASE_URL = $BaseUrl
-            ANTHROPIC_AUTH_TOKEN = $ApiKey
-            ANTHROPIC_MODEL = $MainModel
-            ANTHROPIC_SMALL_FAST_MODEL = $FastModel
-        }
+        env = $envConfig
+    }
+    if ($Command -ne "claude") {
+        $newModel.command = $Command
     }
     
     $config = @($config) + @($newModel)
@@ -788,11 +1009,7 @@ function Get-ModelEnvValue {
 
     $model = $models[$ModelIndex - 1]
 
-    if ($model.env -and $model.env.$KeyName) {
-        return $model.env.$KeyName
-    }
-
-    return $null
+    return Get-EnvEntryValue -EnvObject $model.env -KeyName $KeyName
 }
 
 function Update-ClaudeSettings {
@@ -880,6 +1097,34 @@ function Create-DefaultSettings {
     }
 
     Save-JsonNoBOM -Path $CLAUDE_SETTINGS_FILE -Object $settings
+}
+
+function Update-CodexConfig {
+    param(
+        [string]$BaseUrl
+    )
+
+    $codexDir = Split-Path $CODEX_CONFIG_FILE -Parent
+    if (-not (Test-Path $codexDir)) {
+        New-Item -ItemType Directory -Force -Path $codexDir | Out-Null
+    }
+
+    $lines = if (Test-Path $CODEX_CONFIG_FILE) { @(Get-Content $CODEX_CONFIG_FILE) } else { @() }
+    $updated = $false
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^openai_base_url\s*=') {
+            $lines[$i] = "openai_base_url = `"$BaseUrl`""
+            $updated = $true
+        }
+    }
+
+    if (-not $updated) {
+        $lines += "openai_base_url = `"$BaseUrl`""
+    }
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllLines($CODEX_CONFIG_FILE, $lines, $utf8NoBom)
 }
 
 function Remove-Model {
@@ -1060,8 +1305,12 @@ function Run-WithModel {
     }
     
     $model = $models[$ModelIndex - 1]
+    $command = Get-ModelCommand -Model $model
+    $keys = Get-ModelConfigKeys -Command $command
+    $baseUrl = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.BaseUrl
     
     Write-Host "[OK] Using model: $($model.name)" -ForegroundColor Cyan
+    Write-Host "[OK] Using command: $command" -ForegroundColor Cyan
     
     if ($SkipPerm) {
         Write-Host "[OK] Bypass permissions enabled" -ForegroundColor Yellow
@@ -1070,34 +1319,43 @@ function Run-WithModel {
     Write-Host "-----------------------------------"
 
     # Get model environment values
-    $mainModel = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName "ANTHROPIC_MODEL"
-    $fastModel = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName "ANTHROPIC_SMALL_FAST_MODEL"
+    $mainModel = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.MainModel
+    $fastModel = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.FastModel
 
     # Default fast model to main model if not set
     if (-not $fastModel) {
         $fastModel = $mainModel
     }
 
-    # Update Claude settings for team subagent support
-    Update-ClaudeSettings -MainModel $mainModel -FastModel $fastModel
-    Write-Host "[OK] Updated Claude settings (for team subagent)" -ForegroundColor Cyan
+    if ($command -ne "codex") {
+        Update-ClaudeSettings -MainModel $mainModel -FastModel $fastModel
+        Write-Host "[OK] Updated Claude settings (for team subagent)" -ForegroundColor Cyan
+    } else {
+        Update-CodexConfig -BaseUrl $baseUrl
+        Write-Host "[OK] Updated Codex config" -ForegroundColor Cyan
+    }
 
     $envContent = "# Generated by ccc command`n"
     $envContent += "# Model: $($model.name)`n"
-    $envContent += "`$env:ANTHROPIC_BASE_URL = `"$($model.env.ANTHROPIC_BASE_URL)`"`n"
-    $envContent += "`$env:ANTHROPIC_AUTH_TOKEN = `"$($model.env.ANTHROPIC_AUTH_TOKEN)`"`n"
-    $envContent += "`$env:ANTHROPIC_MODEL = `"$($model.env.ANTHROPIC_MODEL)`"`n"
-    $envContent += "`$env:ANTHROPIC_SMALL_FAST_MODEL = `"$($model.env.ANTHROPIC_SMALL_FAST_MODEL)`"`n"
+    foreach ($entry in Get-EnvEntries -EnvObject $model.env) {
+        if ($command -eq "codex" -and $entry.Name -eq "OPENAI_BASE_URL") {
+            continue
+        }
+        $escapedValue = ([string]$entry.Value).Replace('"', '`"')
+        $envContent += "`$env:$($entry.Name) = `"$escapedValue`"`n"
+    }
 
-    if ($SkipPerm) {
+    if ($SkipPerm -and $command -ne "codex") {
         $envContent += "`$env:CLAUDE_SKIP_PERMISSIONS = `"1`"`n"
         $envContent += "`$env:IS_SANDBOX = `"1`"`n"
     }
 
-    # Add CLAUDE_CODE_MODEL environment variables for subagent support
-    $envContent += "`$env:CLAUDE_CODE_MODEL = `"$mainModel`"`n"
-    $envContent += "`$env:CLAUDE_CODE_SMALL_MODEL = `"$fastModel`"`n"
-    $envContent += "`$env:CLAUDE_CODE_SUBAGENT_MODEL = `"$mainModel`"`n"
+    if ($command -ne "codex") {
+        # Add CLAUDE_CODE_MODEL environment variables for subagent support
+        $envContent += "`$env:CLAUDE_CODE_MODEL = `"$mainModel`"`n"
+        $envContent += "`$env:CLAUDE_CODE_SMALL_MODEL = `"$fastModel`"`n"
+        $envContent += "`$env:CLAUDE_CODE_SUBAGENT_MODEL = `"$mainModel`"`n"
+    }
 
     $envContent | Out-File -FilePath $ENV_FILE -Encoding UTF8
 
@@ -1108,25 +1366,35 @@ function Run-WithModel {
         exit 0
     }
 
-    $env:ANTHROPIC_BASE_URL = $model.env.ANTHROPIC_BASE_URL
-    $env:ANTHROPIC_AUTH_TOKEN = $model.env.ANTHROPIC_AUTH_TOKEN
-    $env:ANTHROPIC_MODEL = $model.env.ANTHROPIC_MODEL
-    $env:ANTHROPIC_SMALL_FAST_MODEL = $model.env.ANTHROPIC_SMALL_FAST_MODEL
-
-    # Add CLAUDE_CODE_MODEL environment variables for subagent support
-    $env:CLAUDE_CODE_MODEL = $mainModel
-    $env:CLAUDE_CODE_SMALL_MODEL = $fastModel
-    $env:CLAUDE_CODE_SUBAGENT_MODEL = $mainModel
-
-    if (Get-Command claude -ErrorAction SilentlyContinue) {
-        if ($SkipPerm) {
-            & claude --dangerously-skip-permissions @ClaudeArgs
-        } else {
-            & claude @ClaudeArgs
+    foreach ($entry in Get-EnvEntries -EnvObject $model.env) {
+        if ($command -eq "codex" -and $entry.Name -eq "OPENAI_BASE_URL") {
+            continue
         }
+        Set-Item -Path "Env:$($entry.Name)" -Value ([string]$entry.Value)
+    }
+
+    if ($SkipPerm -and $command -ne "codex") {
+        $env:CLAUDE_SKIP_PERMISSIONS = "1"
+        $env:IS_SANDBOX = "1"
+    }
+
+    if ($command -ne "codex") {
+        # Add CLAUDE_CODE_MODEL environment variables for subagent support
+        $env:CLAUDE_CODE_MODEL = $mainModel
+        $env:CLAUDE_CODE_SMALL_MODEL = $fastModel
+        $env:CLAUDE_CODE_SUBAGENT_MODEL = $mainModel
+    }
+
+    $commandArgs = @($ClaudeArgs)
+    if ($SkipPerm) {
+        $commandArgs = @((Get-BypassFlag -Command $command)) + $commandArgs
+    }
+
+    if (Get-Command $command -ErrorAction SilentlyContinue) {
+        & $command @commandArgs
     } else {
-        Write-Error "Claude CLI not found"
-        Write-Host "Install from: https://claude.ai"
+        Write-Error "$command CLI not found"
+        Write-Host "Install the required CLI and ensure '$command' is on PATH."
         exit 1
     }
 }
