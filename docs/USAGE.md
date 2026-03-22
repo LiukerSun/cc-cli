@@ -56,7 +56,7 @@ ccc 2
 ccc -y 2
 ```
 
-## 传递参数给 Claude
+## 传递参数给目标 CLI
 
 ```bash
 ccc 1 -- --help
@@ -69,4 +69,10 @@ ccc 2 -- "写一个 hello world 程序"
 ccc -e 2
 source /tmp/cc-model-env.sh
 claude
+```
+
+如果配置里使用了 `"command": "codex"`，最后一步也可以直接运行：
+
+```bash
+codex
 ```

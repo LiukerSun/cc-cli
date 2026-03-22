@@ -2,6 +2,27 @@
 
 本项目的所有重要变更都将记录在此文件中。
 
+## [Unreleased]
+
+### 新增
+- **OpenAI Codex CLI 支持** - 增加 `command: "codex"` 配置分支，允许 `ccc` 直接启动 Codex CLI
+  - `ccc -a` 新增 `OpenAI Codex` provider 入口
+  - 内置官方 Codex 模型列表，并支持自定义模型 ID
+  - `-y` 在 Codex 下映射为 `--dangerously-bypass-approvals-and-sandbox`
+- **Codex 配置同步** - 启动 Codex 时自动同步本机配置文件
+  - 更新 `~/.codex/config.toml` 的 `model`、`model_provider` 和 `[model_providers.codex]`
+  - 更新 `~/.codex/auth.json` 的 `OPENAI_API_KEY`
+
+### 变更
+- **配置校验逻辑** - 根据 `command` 动态校验 `ANTHROPIC_*` 或 `OPENAI_*` 字段
+- **Provider 菜单** - `ccc -a` 改为单层 provider 选择，默认新增项走 Claude-compatible，Codex 单独作为一个 provider
+- **API Key 展示** - `ccc --show` 现在可以同时展示 Claude-compatible 和 Codex 配置
+
+### 修复
+- **Codex 启动链路** - 修复 Bash 版本读取 `command` 时错误回退到 `claude` 的问题
+- **Codex base URL 规范化** - 自动将根域名规范化为 OpenAI 兼容的 `/v1` 地址，避免请求落到错误的 `/responses`
+- **Codex 兼容告警** - 启动 Codex 时不再注入已废弃的 `OPENAI_BASE_URL` 环境变量，改为写入 `config.toml`
+
 ## [1.5.0] - 2026-03-09
 
 ### 新增
@@ -226,4 +247,4 @@
 
 ---
 
-*本文件最后更新：2026-03-09*
+*本文件最后更新：2026-03-22*

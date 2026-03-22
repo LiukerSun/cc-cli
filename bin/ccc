@@ -20,6 +20,8 @@ PLATFORM=$(detect_platform)
 CONFIG_FILE="$HOME/.cc-config.json"
 ENV_FILE="/tmp/cc-model-env.sh"
 CLAUDE_SETTINGS_FILE="$HOME/.claude/settings.json"
+CODEX_CONFIG_FILE="$HOME/.codex/config.toml"
+CODEX_AUTH_FILE="$HOME/.codex/auth.json"
 
 # Terminal control (cross-platform)
 hide_cursor() { printf "\033[?25l"; }
@@ -33,9 +35,9 @@ clear_screen() {
 move_cursor() { printf "\033[$1;$2H"; }
 
 usage() {
-    echo "Usage: ccc [OPTIONS] [MODEL_INDEX] [-- CLAUDE_ARGS...]"
+    echo "Usage: ccc [OPTIONS] [MODEL_INDEX] [-- CLI_ARGS...]"
     echo ""
-    echo "Start Claude with selected model configuration."
+    echo "Start the configured AI CLI with the selected model configuration."
     echo ""
     echo "Options:"
     echo "  -y, --bypass      Enable bypass permissions"
@@ -52,13 +54,13 @@ usage() {
     echo "  --uninstall       Uninstall cc-cli"
     echo "  -h, --help        Show this help message"
     echo ""
-    echo "Note: This command also updates ~/.claude/settings.json with the selected"
-    echo "      model to ensure team subagents use the same model configuration."
+    echo "Note: When the selected command is 'claude', this command also updates"
+    echo "      ~/.claude/settings.json so team subagents use the same model."
     echo ""
     echo "Examples:"
     echo "  ccc              Interactive model selection (use arrow keys)"
-    echo "  ccc 2            Start Claude with model #2"
-    echo "  ccc -y 3         Start Claude with model #3 and bypass permissions"
+    echo "  ccc 2            Start the configured CLI with model #2"
+    echo "  ccc -y 3         Start the configured CLI with model #3 and bypass permissions"
     echo "  ccc -E           Edit configuration file"
     echo "  ccc -a           Add a new model"
     echo "  ccc -d 2         Delete model #2"
@@ -361,8 +363,6 @@ select_interactive() {
             '')  # Enter
                 echo "" >&2
                 show_cursor >&2
-                echo "" >&2
-                printf "✓ Using model: \033[1;36m%s\033[0m\n" "${models[$selected-1]}" >&2
                 echo $selected
                 return 0
                 ;;
@@ -382,16 +382,119 @@ select_interactive() {
 }
 
 get_model_count() {
+    if command -v jq &> /dev/null; then
+        jq 'length' "$CONFIG_FILE"
+        return
+    fi
+
     grep -c '"name"' "$CONFIG_FILE"
 }
 
 get_model_name() {
     local index=$1
+    if command -v jq &> /dev/null; then
+        jq -r ".[$((index - 1))].name // empty" "$CONFIG_FILE"
+        return
+    fi
+
     sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$CONFIG_FILE" | sed -n "${index}p"
+}
+
+get_model_command() {
+    local model_index=$1
+    if command -v jq &> /dev/null; then
+        jq -r ".[$((model_index - 1))].command // \"claude\"" "$CONFIG_FILE"
+        return
+    fi
+
+    local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
+    local value=$(awk -v start="$start_line" '
+        NR < start { next }
+        /"env"/ { exit }
+        /"command":/ {
+            gsub(/.*"command": *"/, "");
+            gsub(/".*/, "");
+            print;
+            exit
+        }
+        NR > start && /}/ { exit }
+    ' "$CONFIG_FILE")
+
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "claude"
+    fi
+}
+
+get_command_base_url_key() {
+    local command_name="$1"
+    if [ "$command_name" = "codex" ]; then
+        echo "OPENAI_BASE_URL"
+    else
+        echo "ANTHROPIC_BASE_URL"
+    fi
+}
+
+get_command_api_key_key() {
+    local command_name="$1"
+    if [ "$command_name" = "codex" ]; then
+        echo "OPENAI_API_KEY"
+    else
+        echo "ANTHROPIC_AUTH_TOKEN"
+    fi
+}
+
+get_command_main_model_key() {
+    local command_name="$1"
+    if [ "$command_name" = "codex" ]; then
+        echo "OPENAI_MODEL"
+    else
+        echo "ANTHROPIC_MODEL"
+    fi
+}
+
+get_command_fast_model_key() {
+    local command_name="$1"
+    if [ "$command_name" = "codex" ]; then
+        echo "OPENAI_SMALL_FAST_MODEL"
+    else
+        echo "ANTHROPIC_SMALL_FAST_MODEL"
+    fi
+}
+
+get_command_bypass_flag() {
+    local command_name="$1"
+    if [ "$command_name" = "codex" ]; then
+        echo "--dangerously-bypass-approvals-and-sandbox"
+    else
+        echo "--dangerously-skip-permissions"
+    fi
+}
+
+normalize_codex_base_url() {
+    local base_url="$1"
+    local trimmed="${base_url%/}"
+
+    if [[ "$trimmed" == */v1 ]]; then
+        echo "$trimmed"
+    elif [[ "$trimmed" == */v1/models ]]; then
+        echo "${trimmed%/models}"
+    elif [[ "$trimmed" == */models ]]; then
+        echo "${trimmed%/models}/v1"
+    elif [[ "$trimmed" == */responses ]]; then
+        echo "${trimmed%/responses}/v1"
+    else
+        echo "$trimmed/v1"
+    fi
 }
 
 get_env_vars() {
     local model_index=$1
+    if command -v jq &> /dev/null; then
+        jq -r ".[$((model_index - 1))].env // {} | to_entries[] | \"\(.key)=\(.value | @sh)\"" "$CONFIG_FILE"
+        return
+    fi
 
     # Extract env vars for selected model using awk
     local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
@@ -412,6 +515,10 @@ get_env_vars() {
 get_model_env_value() {
     local model_index=$1
     local key_name=$2
+    if command -v jq &> /dev/null; then
+        jq -r --arg key_name "$key_name" ".[$((model_index - 1))].env[\$key_name] // empty" "$CONFIG_FILE"
+        return
+    fi
 
     local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
     local value=$(awk -v start="$start_line" -v key="$key_name" '
@@ -433,7 +540,7 @@ run_with_model() {
     local skip_perm=$2
     local only_env=$3
     shift 3
-    local claude_args=("$@")
+    local cli_args=("$@")
 
     local count=$(get_model_count)
 
@@ -460,8 +567,19 @@ run_with_model() {
     fi
 
     local model_name=$(get_model_name "$model_index")
-    local main_model=$(get_model_env_value "$model_index" "ANTHROPIC_MODEL")
-    local fast_model=$(get_model_env_value "$model_index" "ANTHROPIC_SMALL_FAST_MODEL")
+    local command_name=$(get_model_command "$model_index")
+    local base_url_key=$(get_command_base_url_key "$command_name")
+    local api_key_key=$(get_command_api_key_key "$command_name")
+    local main_model_key=$(get_command_main_model_key "$command_name")
+    local fast_model_key=$(get_command_fast_model_key "$command_name")
+    local base_url=$(get_model_env_value "$model_index" "$base_url_key")
+    local api_key=$(get_model_env_value "$model_index" "$api_key_key")
+    local main_model=$(get_model_env_value "$model_index" "$main_model_key")
+    local fast_model=$(get_model_env_value "$model_index" "$fast_model_key")
+
+    if [ "$command_name" = "codex" ]; then
+        base_url=$(normalize_codex_base_url "$base_url")
+    fi
 
     # Default fast model to main model if not set
     if [ -z "$fast_model" ]; then
@@ -469,6 +587,7 @@ run_with_model() {
     fi
 
     echo "✓ Using model: $model_name"
+    echo "✓ Using command: $command_name"
 
     if [ "$skip_perm" = "true" ]; then
         printf "✓ \033[0;33mBypass permissions enabled\033[0m\n"
@@ -476,9 +595,14 @@ run_with_model() {
 
     echo "───────────────────────────────────────"
 
-    # Update Claude settings for team subagent support
-    update_claude_settings "$main_model" "$fast_model"
-    echo "✓ Updated Claude settings (for team subagent)"
+    if [ "$command_name" != "codex" ]; then
+        update_claude_settings "$main_model" "$fast_model"
+        echo "✓ Updated Claude settings (for team subagent)"
+    else
+        update_codex_config "$base_url" "$main_model"
+        update_codex_auth "$api_key"
+        echo "✓ Updated Codex config and auth"
+    fi
 
     # Build environment variables
     local env_vars=$(get_env_vars "$model_index")
@@ -489,18 +613,23 @@ run_with_model() {
 
     while IFS= read -r env_line; do
         [ -z "$env_line" ] && continue
+        if [ "$command_name" = "codex" ] && [[ "$env_line" == OPENAI_BASE_URL=* ]]; then
+            continue
+        fi
         echo "export $env_line" >> "$ENV_FILE"
     done <<< "$env_vars"
 
-    if [ "$skip_perm" = "true" ]; then
+    if [ "$skip_perm" = "true" ] && [ "$command_name" != "codex" ]; then
         echo "export CLAUDE_SKIP_PERMISSIONS=1" >> "$ENV_FILE"
         echo "export IS_SANDBOX=1" >> "$ENV_FILE"
     fi
 
-    # Add CLAUDE_CODE_MODEL environment variables for subagent support
-    echo "export CLAUDE_CODE_MODEL=\"$main_model\"" >> "$ENV_FILE"
-    echo "export CLAUDE_CODE_SMALL_MODEL=\"$fast_model\"" >> "$ENV_FILE"
-    echo "export CLAUDE_CODE_SUBAGENT_MODEL=\"$main_model\"" >> "$ENV_FILE"
+    if [ "$command_name" != "codex" ]; then
+        # Add CLAUDE_CODE_MODEL environment variables for subagent support
+        echo "export CLAUDE_CODE_MODEL=\"$main_model\"" >> "$ENV_FILE"
+        echo "export CLAUDE_CODE_SMALL_MODEL=\"$fast_model\"" >> "$ENV_FILE"
+        echo "export CLAUDE_CODE_SUBAGENT_MODEL=\"$main_model\"" >> "$ENV_FILE"
+    fi
 
     if [ "$only_env" = "true" ]; then
         echo ""
@@ -509,13 +638,19 @@ run_with_model() {
         exit 0
     fi
 
-    # Source env file and execute claude
+    # Source env file and execute the configured CLI
     source "$ENV_FILE"
+    local exec_args=("${cli_args[@]}")
     if [ "$skip_perm" = "true" ]; then
-        exec claude --dangerously-skip-permissions "${claude_args[@]}"
-    else
-        exec claude "${claude_args[@]}"
+        exec_args=("$(get_command_bypass_flag "$command_name")" "${exec_args[@]}")
     fi
+
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "Error: $command_name CLI not found"
+        exit 1
+    fi
+
+    exec "$command_name" "${exec_args[@]}"
 }
 
 show_current() {
@@ -569,7 +704,16 @@ validate_config() {
         fi
         echo "✓ JSON syntax is valid"
         
-        local valid_count=$(jq '[.[] | select(.name and .env and .env.ANTHROPIC_BASE_URL and .env.ANTHROPIC_AUTH_TOKEN and .env.ANTHROPIC_MODEL)] | length' "$CONFIG_FILE")
+        local valid_count=$(jq '[.[] | select(
+            .name and .env and
+            ((.command // "claude") as $command |
+                if $command == "codex" then
+                    .env.OPENAI_BASE_URL and .env.OPENAI_API_KEY and .env.OPENAI_MODEL
+                else
+                    .env.ANTHROPIC_BASE_URL and .env.ANTHROPIC_AUTH_TOKEN and .env.ANTHROPIC_MODEL
+                end
+            )
+        )] | length' "$CONFIG_FILE")
         local total_count=$(jq 'length' "$CONFIG_FILE")
         local invalid_count=$((total_count - valid_count))
         
@@ -580,7 +724,16 @@ validate_config() {
         if [ "$invalid_count" -gt 0 ]; then
             echo ""
             echo "Repairing config file..."
-            jq '[.[] | select(.name and .env and .env.ANTHROPIC_BASE_URL and .env.ANTHROPIC_AUTH_TOKEN and .env.ANTHROPIC_MODEL)]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+            jq '[.[] | select(
+                .name and .env and
+                ((.command // "claude") as $command |
+                    if $command == "codex" then
+                        .env.OPENAI_BASE_URL and .env.OPENAI_API_KEY and .env.OPENAI_MODEL
+                    else
+                        .env.ANTHROPIC_BASE_URL and .env.ANTHROPIC_AUTH_TOKEN and .env.ANTHROPIC_MODEL
+                    end
+                )
+            )]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
             mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
             echo "✓ Removed $invalid_count invalid entries"
         fi
@@ -608,22 +761,97 @@ add_model() {
     echo "═══════════════════════════════════════"
     echo ""
     echo "Select provider:"
-    echo "  1) ZHIPU AI - auto fetch models"
-    echo "  2) Alibaba Coding Plan - auto fetch models"
-    echo "  3) Manual input"
+    echo "  1) ZHIPU AI - Claude-compatible provider"
+    echo "  2) Alibaba Coding Plan - Claude-compatible provider"
+    echo "  3) OpenAI Codex"
+    echo "  4) Manual input (Claude-compatible)"
     echo ""
-    read -p "Choice [1-3]: " provider_choice
+    read -p "Choice [1-4]: " provider_choice
 
     if [ "$provider_choice" = "1" ]; then
         add_zhipu_model
     elif [ "$provider_choice" = "2" ]; then
         add_alibaba_coding_plan
     elif [ "$provider_choice" = "3" ]; then
-        add_manual_model
+        add_codex_model
+    elif [ "$provider_choice" = "4" ]; then
+        add_manual_model "claude"
     else
         echo "Error: Invalid choice"
         exit 1
     fi
+}
+
+get_supported_codex_models() {
+    cat <<EOF
+gpt-5.4
+gpt-5.4-mini
+gpt-5.3-codex
+gpt-5.3-codex-spark
+gpt-5.2-codex
+gpt-5.2
+gpt-5.1-codex-max
+gpt-5.1
+gpt-5.1-codex
+gpt-5
+gpt-5-codex
+gpt-5-codex-mini
+EOF
+}
+
+add_codex_model() {
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  OpenAI-Compatible Codex Configuration"
+    echo "═══════════════════════════════════════"
+    echo ""
+
+    read -p "API Base URL (e.g., https://api.openai.com/v1): " base_url
+    [ -z "$base_url" ] && echo "Error: Base URL is required" && exit 1
+
+    read -p "API Key: " api_key
+    [ -z "$api_key" ] && echo "Error: API Key is required" && exit 1
+
+    echo ""
+    echo "Using built-in OpenAI/Codex model list"
+    echo ""
+
+    local models=()
+    while IFS= read -r model; do
+        [ -n "$model" ] && models+=("$model")
+    done <<< "$(get_supported_codex_models)"
+    models+=("Custom model ID")
+
+    local count=${#models[@]}
+    if [ "$count" -eq 0 ]; then
+        echo "Error: No models available"
+        exit 1
+    fi
+
+    echo "Available Models:"
+    echo ""
+    local i=1
+    for model in "${models[@]}"; do
+        printf "  %2d) %s\n" "$i" "$model"
+        ((i++))
+    done
+    echo ""
+
+    read -p "Select model [1-$count]: " main_idx
+    if ! [[ "$main_idx" =~ ^[0-9]+$ ]] || [ "$main_idx" -lt 1 ] || [ "$main_idx" -gt "$count" ]; then
+        echo "Error: Invalid selection"
+        exit 1
+    fi
+    local main_model="${models[$main_idx-1]}"
+    if [ "$main_model" = "Custom model ID" ]; then
+        read -p "Custom model ID: " main_model
+        [ -z "$main_model" ] && echo "Error: Model ID is required" && exit 1
+    fi
+
+    read -p "Display name (default: Codex ($main_model)): " model_name
+    [ -z "$model_name" ] && model_name="Codex ($main_model)"
+
+    save_model_config "$model_name" "$(normalize_codex_base_url "$base_url")" "$api_key" "$main_model" "" "codex"
 }
 
 add_zhipu_model() {
@@ -797,14 +1025,25 @@ minimax-m2.5"
 }
 
 add_manual_model() {
+    local preset_command="${1:-}"
     echo ""
     echo "═══════════════════════════════════════"
-    echo "  Manual Configuration"
+    if [ -n "$preset_command" ]; then
+        echo "  Manual Configuration ($preset_command)"
+    else
+        echo "  Manual Configuration"
+    fi
     echo "═══════════════════════════════════════"
     echo ""
     
     read -p "Model name (e.g., 'GPT-4'): " model_name
     [ -z "$model_name" ] && echo "Error: Name is required" && exit 1
+
+    local command_name="$preset_command"
+    if [ -z "$command_name" ]; then
+        read -p "Command (default: claude, e.g., claude/codex): " command_name
+        [ -z "$command_name" ] && command_name="claude"
+    fi
     
     echo ""
     echo "API Configuration:"
@@ -814,13 +1053,16 @@ add_manual_model() {
     read -p "API Key: " api_key
     [ -z "$api_key" ] && echo "Error: API Key is required" && exit 1
     
-    read -p "Main Model (e.g., 'gpt-4'): " main_model
+    read -p "Main Model (e.g., 'gpt-4' or 'o3'): " main_model
     [ -z "$main_model" ] && echo "Error: Model name is required" && exit 1
     
-    read -p "Fast Model (optional, press Enter to use main model): " fast_model
-    [ -z "$fast_model" ] && fast_model="$main_model"
+    local fast_model=""
+    if [ "$command_name" != "codex" ]; then
+        read -p "Fast Model (optional, press Enter to use main model): " fast_model
+        [ -z "$fast_model" ] && fast_model="$main_model"
+    fi
     
-    save_model_config "$model_name" "$base_url" "$api_key" "$main_model" "$fast_model"
+    save_model_config "$model_name" "$base_url" "$api_key" "$main_model" "$fast_model" "$command_name"
 }
 
 save_model_config() {
@@ -829,22 +1071,37 @@ save_model_config() {
     local api_key="$3"
     local main_model="$4"
     local fast_model="$5"
+    local command_name="${6:-claude}"
+    local base_url_key=$(get_command_base_url_key "$command_name")
+    local api_key_key=$(get_command_api_key_key "$command_name")
+    local main_model_key=$(get_command_main_model_key "$command_name")
+    local fast_model_key=$(get_command_fast_model_key "$command_name")
     
     local temp_file="${CONFIG_FILE}.tmp.$$"
     
     if command -v jq &> /dev/null; then
-        local new_entry=$(cat <<EOF
-{
-  "name": "$model_name",
-  "env": {
-    "ANTHROPIC_BASE_URL": "$base_url",
-    "ANTHROPIC_AUTH_TOKEN": "$api_key",
-    "ANTHROPIC_MODEL": "$main_model",
-    "ANTHROPIC_SMALL_FAST_MODEL": "$fast_model"
-  }
-}
-EOF
-)
+        local new_entry=$(jq -n \
+            --arg name "$model_name" \
+            --arg command_name "$command_name" \
+            --arg base_url_key "$base_url_key" \
+            --arg api_key_key "$api_key_key" \
+            --arg main_model_key "$main_model_key" \
+            --arg fast_model_key "$fast_model_key" \
+            --arg base_url "$base_url" \
+            --arg api_key "$api_key" \
+            --arg main_model "$main_model" \
+            --arg fast_model "$fast_model" '
+                {
+                    name: $name,
+                    env: {
+                        ($base_url_key): $base_url,
+                        ($api_key_key): $api_key,
+                        ($main_model_key): $main_model
+                    }
+                }
+                | if $fast_model != "" then .env[$fast_model_key] = $fast_model else . end
+                | if $command_name != "claude" then .command = $command_name else . end
+            ')
         
         if [ ! -s "$CONFIG_FILE" ] || [ "$(cat "$CONFIG_FILE" | tr -d '[:space:]')" = "[]" ]; then
             echo "[$new_entry]" | jq '.' > "$temp_file"
@@ -860,14 +1117,28 @@ EOF
             exit 1
         fi
     else
+        local command_json=""
+        if [ "$command_name" != "claude" ]; then
+            command_json="        \"command\": \"$command_name\","
+        fi
+
+        local fast_model_json=""
+        if [ -n "$fast_model" ]; then
+            fast_model_json=$(cat <<EOF
+,
+            "$fast_model_key": "$fast_model"
+EOF
+)
+        fi
+
         local new_entry=$(cat <<EOF
     {
         "name": "$model_name",
+${command_json}
         "env": {
-            "ANTHROPIC_BASE_URL": "$base_url",
-            "ANTHROPIC_AUTH_TOKEN": "$api_key",
-            "ANTHROPIC_MODEL": "$main_model",
-            "ANTHROPIC_SMALL_FAST_MODEL": "$fast_model"
+            "$base_url_key": "$base_url",
+            "$api_key_key": "$api_key",
+            "$main_model_key": "$main_model"${fast_model_json}
         }
     }
 EOF
@@ -1000,36 +1271,69 @@ show_keys() {
     echo ""
 
     local index=1
-    local in_env=0
-    local current_name=""
-    local current_url=""
-    local current_key=""
+    if command -v jq &> /dev/null; then
+        while IFS=$'\t' read -r current_name command_name current_url current_key; do
+            [ -z "$current_name" ] && continue
 
-    while IFS= read -r line; do
-        if echo "$line" | grep -q '"name"'; then
-            current_name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
-        fi
-
-        if echo "$line" | grep -q '"ANTHROPIC_BASE_URL"'; then
-            current_url=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
-        fi
-
-        if echo "$line" | grep -q '"ANTHROPIC_AUTH_TOKEN"'; then
-            current_key=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
-            # Mask the key (show first 8 and last 4 chars)
             local key_len=${#current_key}
+            local masked_key
             if [ $key_len -gt 12 ]; then
-                local masked_key="${current_key:0:8}...${current_key: -4}"
+                masked_key="${current_key:0:8}...${current_key: -4}"
             else
-                local masked_key="${current_key:0:4}***"
+                masked_key="${current_key:0:4}***"
             fi
 
             printf "%d) \033[1;36m%s\033[0m\n" "$index" "$current_name"
+            printf "   Command: %s\n" "$command_name"
             printf "   URL: %s\n" "$current_url"
             printf "   Key: \033[0;90m%s\033[0m\n\n" "$masked_key"
             ((index++))
-        fi
-    done < "$CONFIG_FILE"
+        done < <(jq -r '.[] | select(.name and .env) | [
+            (.name // ""),
+            (.command // "claude"),
+            (.env.ANTHROPIC_BASE_URL // .env.OPENAI_BASE_URL // ""),
+            (.env.ANTHROPIC_AUTH_TOKEN // .env.OPENAI_API_KEY // "")
+        ] | @tsv' "$CONFIG_FILE")
+    else
+        local current_name=""
+        local command_name="claude"
+        local current_url=""
+        local current_key=""
+
+        while IFS= read -r line; do
+            if echo "$line" | grep -q '"name"'; then
+                current_name=$(echo "$line" | sed 's/.*"name": *"\([^"]*\)".*/\1/')
+                command_name="claude"
+                current_url=""
+                current_key=""
+            fi
+
+            if echo "$line" | grep -q '"command"'; then
+                command_name=$(echo "$line" | sed 's/.*"command": *"\([^"]*\)".*/\1/')
+            fi
+
+            if echo "$line" | grep -q '"ANTHROPIC_BASE_URL"\|"OPENAI_BASE_URL"'; then
+                current_url=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
+            fi
+
+            if echo "$line" | grep -q '"ANTHROPIC_AUTH_TOKEN"\|"OPENAI_API_KEY"'; then
+                current_key=$(echo "$line" | sed 's/.*": *"\([^"]*\)".*/\1/')
+                local key_len=${#current_key}
+                local masked_key
+                if [ $key_len -gt 12 ]; then
+                    masked_key="${current_key:0:8}...${current_key: -4}"
+                else
+                    masked_key="${current_key:0:4}***"
+                fi
+
+                printf "%d) \033[1;36m%s\033[0m\n" "$index" "$current_name"
+                printf "   Command: %s\n" "$command_name"
+                printf "   URL: %s\n" "$current_url"
+                printf "   Key: \033[0;90m%s\033[0m\n\n" "$masked_key"
+                ((index++))
+            fi
+        done < "$CONFIG_FILE"
+    fi
 
     echo "───────────────────────────────────────"
     echo ""
@@ -1100,6 +1404,132 @@ create_default_settings() {
   }
 }
 EOF
+}
+
+update_codex_config() {
+    local base_url="$1"
+    local model="$2"
+
+    mkdir -p "$HOME/.codex"
+
+    local temp_file="${CODEX_CONFIG_FILE}.tmp"
+    if [ ! -f "$CODEX_CONFIG_FILE" ]; then
+        cat > "$CODEX_CONFIG_FILE" <<EOF
+model_provider = "codex"
+model = "$model"
+model_reasoning_effort = "high"
+disable_response_storage = true
+
+[model_providers.codex]
+name = "codex"
+base_url = "$base_url"
+wire_api = "responses"
+EOF
+        return
+    fi
+
+    awk -v url="$base_url" -v model="$model" '
+        function emit_top_level_defaults() {
+            if (!top_provider_seen) print "model_provider = \"codex\""
+            if (!top_model_seen) print "model = \"" model "\""
+        }
+        function emit_codex_defaults() {
+            if (in_codex) {
+                if (!codex_name_seen) print "name = \"codex\""
+                if (!codex_base_seen) print "base_url = \"" url "\""
+                if (!codex_wire_seen) print "wire_api = \"responses\""
+            }
+        }
+        /^\[[^]]+\]/ {
+            if (!saw_section) {
+                emit_top_level_defaults()
+                saw_section = 1
+            }
+            emit_codex_defaults()
+            current_section = substr($0, 2, length($0) - 2)
+            in_codex = (current_section == "model_providers.codex")
+            if (in_codex) {
+                section_seen = 1
+                codex_name_seen = 0
+                codex_base_seen = 0
+                codex_wire_seen = 0
+            }
+            print
+            next
+        }
+        {
+            if (current_section == "") {
+                if ($0 ~ /^model_provider[[:space:]]*=/) {
+                    print "model_provider = \"codex\""
+                    top_provider_seen = 1
+                    next
+                }
+                if ($0 ~ /^model[[:space:]]*=/) {
+                    print "model = \"" model "\""
+                    top_model_seen = 1
+                    next
+                }
+                if ($0 ~ /^openai_base_url[[:space:]]*=/) {
+                    next
+                }
+                print
+                next
+            }
+            if (in_codex) {
+                if ($0 ~ /^name[[:space:]]*=/) {
+                    print "name = \"codex\""
+                    codex_name_seen = 1
+                    next
+                }
+                if ($0 ~ /^base_url[[:space:]]*=/) {
+                    print "base_url = \"" url "\""
+                    codex_base_seen = 1
+                    next
+                }
+                if ($0 ~ /^wire_api[[:space:]]*=/) {
+                    print "wire_api = \"responses\""
+                    codex_wire_seen = 1
+                    next
+                }
+            }
+            print
+        }
+        END {
+            if (!saw_section) {
+                emit_top_level_defaults()
+            }
+            emit_codex_defaults()
+            if (!section_seen) {
+                if (NR > 0) print ""
+                print "[model_providers.codex]"
+                print "name = \"codex\""
+                print "base_url = \"" url "\""
+                print "wire_api = \"responses\""
+            }
+        }
+    ' "$CODEX_CONFIG_FILE" > "$temp_file" && mv "$temp_file" "$CODEX_CONFIG_FILE"
+}
+
+update_codex_auth() {
+    local api_key="$1"
+
+    mkdir -p "$HOME/.codex"
+
+    if command -v jq &> /dev/null && [ -f "$CODEX_AUTH_FILE" ]; then
+        jq --arg api_key "$api_key" '.OPENAI_API_KEY = $api_key' "$CODEX_AUTH_FILE" > "${CODEX_AUTH_FILE}.tmp" 2>/dev/null \
+            && mv "${CODEX_AUTH_FILE}.tmp" "$CODEX_AUTH_FILE" \
+            && chmod 600 "$CODEX_AUTH_FILE"
+        if [ $? -eq 0 ]; then
+            return
+        fi
+    fi
+
+    cat > "$CODEX_AUTH_FILE" <<EOF
+{
+  "OPENAI_API_KEY": "$api_key"
+}
+EOF
+    chmod 600 "$CODEX_AUTH_FILE"
 }
 
 skip_perm=false
