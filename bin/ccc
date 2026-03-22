@@ -21,6 +21,7 @@ CONFIG_FILE="$HOME/.cc-config.json"
 ENV_FILE="/tmp/cc-model-env.sh"
 CLAUDE_SETTINGS_FILE="$HOME/.claude/settings.json"
 CODEX_CONFIG_FILE="$HOME/.codex/config.toml"
+CODEX_AUTH_FILE="$HOME/.codex/auth.json"
 
 # Terminal control (cross-platform)
 hide_cursor() { printf "\033[?25l"; }
@@ -551,9 +552,11 @@ run_with_model() {
     local model_name=$(get_model_name "$model_index")
     local command_name=$(get_model_command "$model_index")
     local base_url_key=$(get_command_base_url_key "$command_name")
+    local api_key_key=$(get_command_api_key_key "$command_name")
     local main_model_key=$(get_command_main_model_key "$command_name")
     local fast_model_key=$(get_command_fast_model_key "$command_name")
     local base_url=$(get_model_env_value "$model_index" "$base_url_key")
+    local api_key=$(get_model_env_value "$model_index" "$api_key_key")
     local main_model=$(get_model_env_value "$model_index" "$main_model_key")
     local fast_model=$(get_model_env_value "$model_index" "$fast_model_key")
 
@@ -575,8 +578,9 @@ run_with_model() {
         update_claude_settings "$main_model" "$fast_model"
         echo "✓ Updated Claude settings (for team subagent)"
     else
-        update_codex_config "$base_url"
-        echo "✓ Updated Codex config"
+        update_codex_config "$base_url" "$main_model"
+        update_codex_auth "$api_key"
+        echo "✓ Updated Codex config and auth"
     fi
 
     # Build environment variables
@@ -1383,29 +1387,128 @@ EOF
 
 update_codex_config() {
     local base_url="$1"
+    local model="$2"
 
     mkdir -p "$HOME/.codex"
 
     local temp_file="${CODEX_CONFIG_FILE}.tmp"
     if [ ! -f "$CODEX_CONFIG_FILE" ]; then
-        printf 'openai_base_url = "%s"\n' "$base_url" > "$CODEX_CONFIG_FILE"
+        cat > "$CODEX_CONFIG_FILE" <<EOF
+model_provider = "codex"
+model = "$model"
+model_reasoning_effort = "high"
+disable_response_storage = true
+
+[model_providers.codex]
+name = "codex"
+base_url = "$base_url"
+wire_api = "responses"
+EOF
         return
     fi
 
-    awk -v url="$base_url" '
-        BEGIN { updated = 0 }
-        /^openai_base_url[[:space:]]*=/ {
-            print "openai_base_url = \"" url "\""
-            updated = 1
+    awk -v url="$base_url" -v model="$model" '
+        function emit_top_level_defaults() {
+            if (!top_provider_seen) print "model_provider = \"codex\""
+            if (!top_model_seen) print "model = \"" model "\""
+        }
+        function emit_codex_defaults() {
+            if (in_codex) {
+                if (!codex_name_seen) print "name = \"codex\""
+                if (!codex_base_seen) print "base_url = \"" url "\""
+                if (!codex_wire_seen) print "wire_api = \"responses\""
+            }
+        }
+        /^\[[^]]+\]/ {
+            if (!saw_section) {
+                emit_top_level_defaults()
+                saw_section = 1
+            }
+            emit_codex_defaults()
+            current_section = substr($0, 2, length($0) - 2)
+            in_codex = (current_section == "model_providers.codex")
+            if (in_codex) {
+                section_seen = 1
+                codex_name_seen = 0
+                codex_base_seen = 0
+                codex_wire_seen = 0
+            }
+            print
             next
         }
-        { print }
+        {
+            if (current_section == "") {
+                if ($0 ~ /^model_provider[[:space:]]*=/) {
+                    print "model_provider = \"codex\""
+                    top_provider_seen = 1
+                    next
+                }
+                if ($0 ~ /^model[[:space:]]*=/) {
+                    print "model = \"" model "\""
+                    top_model_seen = 1
+                    next
+                }
+                if ($0 ~ /^openai_base_url[[:space:]]*=/) {
+                    next
+                }
+                print
+                next
+            }
+            if (in_codex) {
+                if ($0 ~ /^name[[:space:]]*=/) {
+                    print "name = \"codex\""
+                    codex_name_seen = 1
+                    next
+                }
+                if ($0 ~ /^base_url[[:space:]]*=/) {
+                    print "base_url = \"" url "\""
+                    codex_base_seen = 1
+                    next
+                }
+                if ($0 ~ /^wire_api[[:space:]]*=/) {
+                    print "wire_api = \"responses\""
+                    codex_wire_seen = 1
+                    next
+                }
+            }
+            print
+        }
         END {
-            if (!updated) {
-                print "openai_base_url = \"" url "\""
+            if (!saw_section) {
+                emit_top_level_defaults()
+            }
+            emit_codex_defaults()
+            if (!section_seen) {
+                if (NR > 0) print ""
+                print "[model_providers.codex]"
+                print "name = \"codex\""
+                print "base_url = \"" url "\""
+                print "wire_api = \"responses\""
             }
         }
     ' "$CODEX_CONFIG_FILE" > "$temp_file" && mv "$temp_file" "$CODEX_CONFIG_FILE"
+}
+
+update_codex_auth() {
+    local api_key="$1"
+
+    mkdir -p "$HOME/.codex"
+
+    if command -v jq &> /dev/null && [ -f "$CODEX_AUTH_FILE" ]; then
+        jq --arg api_key "$api_key" '.OPENAI_API_KEY = $api_key' "$CODEX_AUTH_FILE" > "${CODEX_AUTH_FILE}.tmp" 2>/dev/null \
+            && mv "${CODEX_AUTH_FILE}.tmp" "$CODEX_AUTH_FILE" \
+            && chmod 600 "$CODEX_AUTH_FILE"
+        if [ $? -eq 0 ]; then
+            return
+        fi
+    fi
+
+    cat > "$CODEX_AUTH_FILE" <<EOF
+{
+  "OPENAI_API_KEY": "$api_key"
+}
+EOF
+    chmod 600 "$CODEX_AUTH_FILE"
 }
 
 skip_perm=false

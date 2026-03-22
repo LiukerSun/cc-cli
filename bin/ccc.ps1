@@ -11,6 +11,7 @@ $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
 $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
 $CLAUDE_SETTINGS_FILE = "$env:USERPROFILE\.claude\settings.json"
 $CODEX_CONFIG_FILE = "$env:USERPROFILE\.codex\config.toml"
+$CODEX_AUTH_FILE = "$env:USERPROFILE\.codex\auth.json"
 
 function Save-JsonNoBOM {
     param(
@@ -1101,7 +1102,8 @@ function Create-DefaultSettings {
 
 function Update-CodexConfig {
     param(
-        [string]$BaseUrl
+        [string]$BaseUrl,
+        [string]$Model
     )
 
     $codexDir = Split-Path $CODEX_CONFIG_FILE -Parent
@@ -1109,22 +1111,176 @@ function Update-CodexConfig {
         New-Item -ItemType Directory -Force -Path $codexDir | Out-Null
     }
 
-    $lines = if (Test-Path $CODEX_CONFIG_FILE) { @(Get-Content $CODEX_CONFIG_FILE) } else { @() }
-    $updated = $false
+    if (-not (Test-Path $CODEX_CONFIG_FILE)) {
+        $lines = @(
+            'model_provider = "codex"',
+            "model = `"$Model`"",
+            'model_reasoning_effort = "high"',
+            'disable_response_storage = true',
+            '',
+            '[model_providers.codex]',
+            'name = "codex"',
+            "base_url = `"$BaseUrl`"",
+            'wire_api = "responses"'
+        )
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllLines($CODEX_CONFIG_FILE, $lines, $utf8NoBom)
+        return
+    }
 
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^openai_base_url\s*=') {
-            $lines[$i] = "openai_base_url = `"$BaseUrl`""
-            $updated = $true
+    $lines = @(Get-Content $CODEX_CONFIG_FILE)
+    $updated = $false
+    $topProviderUpdated = $false
+    $topModelUpdated = $false
+    $inCodexSection = $false
+    $codexSectionSeen = $false
+    $codexNameUpdated = $false
+    $codexBaseUpdated = $false
+    $codexWireUpdated = $false
+    $newLines = New-Object System.Collections.Generic.List[string]
+
+    function Add-CodexSectionDefaults {
+        param(
+            [System.Collections.Generic.List[string]]$Target
+        )
+
+        if (-not $codexNameUpdated) {
+            $Target.Add('name = "codex"')
+        }
+        if (-not $codexBaseUpdated) {
+            $Target.Add("base_url = `"$BaseUrl`"")
+        }
+        if (-not $codexWireUpdated) {
+            $Target.Add('wire_api = "responses"')
         }
     }
 
-    if (-not $updated) {
-        $lines += "openai_base_url = `"$BaseUrl`""
+    foreach ($line in $lines) {
+        if ($line -match '^\[(.+)\]') {
+            if ($inCodexSection) {
+                Add-CodexSectionDefaults -Target $newLines
+                $inCodexSection = $false
+            }
+
+            $sectionName = $Matches[1]
+            if ($sectionName -eq 'model_providers.codex') {
+                $codexSectionSeen = $true
+                $inCodexSection = $true
+                $codexNameUpdated = $false
+                $codexBaseUpdated = $false
+                $codexWireUpdated = $false
+            }
+
+            $newLines.Add($line)
+            continue
+        }
+
+        if (-not $inCodexSection) {
+            if ($line -match '^model_provider\s*=') {
+                $newLines.Add('model_provider = "codex"')
+                $topProviderUpdated = $true
+                continue
+            }
+            if ($line -match '^model\s*=') {
+                $newLines.Add("model = `"$Model`"")
+                $topModelUpdated = $true
+                continue
+            }
+            if ($line -match '^openai_base_url\s*=') {
+                continue
+            }
+            $newLines.Add($line)
+            continue
+        }
+
+        if ($line -match '^name\s*=') {
+            $newLines.Add('name = "codex"')
+            $codexNameUpdated = $true
+            continue
+        }
+        if ($line -match '^base_url\s*=') {
+            $newLines.Add("base_url = `"$BaseUrl`"")
+            $codexBaseUpdated = $true
+            continue
+        }
+        if ($line -match '^wire_api\s*=') {
+            $newLines.Add('wire_api = "responses"')
+            $codexWireUpdated = $true
+            continue
+        }
+
+        $newLines.Add($line)
+    }
+
+    if ($inCodexSection) {
+        Add-CodexSectionDefaults -Target $newLines
+    }
+
+    $sectionIndex = -1
+    for ($i = 0; $i -lt $newLines.Count; $i++) {
+        if ($newLines[$i] -match '^\[') {
+            $sectionIndex = $i
+            break
+        }
+    }
+
+    $topDefaults = New-Object System.Collections.Generic.List[string]
+    if (-not $topProviderUpdated) {
+        $topDefaults.Add('model_provider = "codex"')
+    }
+    if (-not $topModelUpdated) {
+        $topDefaults.Add("model = `"$Model`"")
+    }
+
+    if ($topDefaults.Count -gt 0) {
+        if ($sectionIndex -ge 0) {
+            $prefix = @($newLines[0..($sectionIndex - 1)])
+            $suffix = @($newLines[$sectionIndex..($newLines.Count - 1)])
+            $newLines = New-Object System.Collections.Generic.List[string]
+            foreach ($item in $prefix) { $newLines.Add($item) }
+            foreach ($item in $topDefaults) { $newLines.Add($item) }
+            foreach ($item in $suffix) { $newLines.Add($item) }
+        } else {
+            foreach ($item in $topDefaults) { $newLines.Add($item) }
+        }
+    }
+
+    if (-not $codexSectionSeen) {
+        if ($newLines.Count -gt 0 -and $newLines[$newLines.Count - 1] -ne '') {
+            $newLines.Add('')
+        }
+        $newLines.Add('[model_providers.codex]')
+        $newLines.Add('name = "codex"')
+        $newLines.Add("base_url = `"$BaseUrl`"")
+        $newLines.Add('wire_api = "responses"')
     }
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllLines($CODEX_CONFIG_FILE, $lines, $utf8NoBom)
+    [System.IO.File]::WriteAllLines($CODEX_CONFIG_FILE, $newLines, $utf8NoBom)
+}
+
+function Update-CodexAuth {
+    param(
+        [string]$ApiKey
+    )
+
+    $codexDir = Split-Path $CODEX_AUTH_FILE -Parent
+    if (-not (Test-Path $codexDir)) {
+        New-Item -ItemType Directory -Force -Path $codexDir | Out-Null
+    }
+
+    $auth = @{}
+    if (Test-Path $CODEX_AUTH_FILE) {
+        try {
+            $existing = Get-Content $CODEX_AUTH_FILE -Raw | ConvertFrom-Json
+            $auth = ConvertTo-Hashtable -InputObject $existing
+        } catch {
+            $auth = @{}
+        }
+    }
+
+    $auth["OPENAI_API_KEY"] = $ApiKey
+    Save-JsonNoBOM -Path $CODEX_AUTH_FILE -Object $auth
 }
 
 function Remove-Model {
@@ -1308,6 +1464,7 @@ function Run-WithModel {
     $command = Get-ModelCommand -Model $model
     $keys = Get-ModelConfigKeys -Command $command
     $baseUrl = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.BaseUrl
+    $apiKey = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.ApiKey
     
     Write-Host "[OK] Using model: $($model.name)" -ForegroundColor Cyan
     Write-Host "[OK] Using command: $command" -ForegroundColor Cyan
@@ -1331,8 +1488,9 @@ function Run-WithModel {
         Update-ClaudeSettings -MainModel $mainModel -FastModel $fastModel
         Write-Host "[OK] Updated Claude settings (for team subagent)" -ForegroundColor Cyan
     } else {
-        Update-CodexConfig -BaseUrl $baseUrl
-        Write-Host "[OK] Updated Codex config" -ForegroundColor Cyan
+        Update-CodexConfig -BaseUrl $baseUrl -Model $mainModel
+        Update-CodexAuth -ApiKey $apiKey
+        Write-Host "[OK] Updated Codex config and auth" -ForegroundColor Cyan
     }
 
     $envContent = "# Generated by ccc command`n"
