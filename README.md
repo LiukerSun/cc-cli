@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  交互式选择 • 一键切换 • 直接启动 Claude
+  交互式选择 • 一键切换 • 直接启动 Claude / Codex
 </p>
 
 <p align="center">
@@ -25,15 +25,15 @@
 ## ✨ 特性
 
 - 🎯 **交互式选择** - 使用上下键轻松切换模型
-- 🚀 **直接启动** - 无需修改环境变量，直接启动 Claude
+- 🚀 **直接启动** - 无需手动切换配置，直接启动 Claude 或 Codex
 - 🔑 **API Key 管理** - 交互式添加、查看和编辑配置
 - 🎨 **彩色输出** - 美观的终端界面
 - ⚡ **零依赖** - 纯 Bash 实现，无外部依赖
 - 🔄 **Bypass 模式** - 支持 `CLAUDE_SKIP_PERMISSIONS`
 - 📦 **配置持久化** - 自动保存和恢复上次选择
-- 🤖 **Team Subagent 支持** - 自动同步模型配置到 Claude Code，确保子代理使用相同模型
-- 🔀 **多提供商支持** - 支持 Anthropic、智谱 AI、阿里云百炼（Coding Plan）等
-- 📡 **自动获取模型** - 配置时自动从 API 获取最新模型列表
+- 🤖 **Team / Codex 配置同步** - 启动 Claude 时自动同步 `~/.claude/settings.json`；启动 Codex 时自动同步 `~/.codex/config.toml` 和 `~/.codex/auth.json`
+- 🔀 **多提供商支持** - 支持 Anthropic 兼容提供商、智谱 AI、阿里云百炼（Coding Plan）和 OpenAI Codex
+- 📡 **自动获取模型** - Claude-compatible provider 支持从 API 获取模型列表；Codex 支持内置官方模型列表
 
 ## 📦 安装
 
@@ -131,21 +131,23 @@ ccc -E    # 用 vim 打开配置文件
 ccc -a    # 交互式添加新模型
 ```
 
-支持三种添加方式：
+支持四种添加方式：
 1. **ZHIPU AI 自动获取** - 选择 ZHIPU AI，输入 API Key，自动获取最新模型列表
 2. **Alibaba Coding Plan (百炼)** - 选择阿里云百炼，输入 API Key，自动获取编程模型列表
-3. **手动输入** - 手动填写所有配置信息
+3. **OpenAI Codex** - 输入 API Base URL / API Key，从内置官方 Codex 模型列表中选择
+4. **手动输入（Claude-compatible）** - 手动填写 Claude-compatible 配置信息
 
 #### ZHIPU AI 快速配置示例
 
 ```bash
 $ ccc -a
 Select provider:
-  1) ZHIPU AI (智谱) - auto fetch models
-  2) Alibaba Coding Plan (百炼) - auto fetch models
-  3) Manual input
+  1) ZHIPU AI - Claude-compatible provider
+  2) Alibaba Coding Plan - Claude-compatible provider
+  3) OpenAI Codex
+  4) Manual input (Claude-compatible)
 
-Choice [1-3]: 1
+Choice [1-4]: 1
 
 API Key: your-zhipu-api-key
 
@@ -169,11 +171,12 @@ Model 'ZHIPU (GLM-4-Air)' added successfully!
 ```bash
 $ ccc -a
 Select provider:
-  1) ZHIPU AI (智谱) - auto fetch models
-  2) Alibaba Coding Plan (百炼) - auto fetch models
-  3) Manual input
+  1) ZHIPU AI - Claude-compatible provider
+  2) Alibaba Coding Plan - Claude-compatible provider
+  3) OpenAI Codex
+  4) Manual input (Claude-compatible)
 
-Choice [1-3]: 2
+Choice [1-4]: 2
 
 API Key: your-dashscope-api-key
 
@@ -194,6 +197,35 @@ Select main model [1-8]: 1
 Select fast model [1-8] (default: same as main): 4
 
 Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
+```
+
+#### OpenAI Codex 快速配置示例
+
+```bash
+$ ccc -a
+Select provider:
+  1) ZHIPU AI - Claude-compatible provider
+  2) Alibaba Coding Plan - Claude-compatible provider
+  3) OpenAI Codex
+  4) Manual input (Claude-compatible)
+
+Choice [1-4]: 3
+
+API Base URL (e.g., https://api.openai.com/v1): https://relay.example.com
+API Key: sk-xxx
+
+Using built-in OpenAI/Codex model list
+
+Available Models:
+
+   1) gpt-5.4
+   2) gpt-5.4-mini
+   3) gpt-5.3-codex
+   ...
+
+Select model [1-N]: 1
+
+Model 'Codex (gpt-5.4)' added successfully!
 ```
 
 ## 📖 命令参考
@@ -282,6 +314,19 @@ Model 'Alibaba Coding Plan (qwen3.5-plus)' added successfully!
 
 `ccc -a` 的 `codex` 分支会使用内置的 OpenAI/Codex 模型列表供选择，不请求远端 `/models`；如果需要特殊模型，也可以手动输入自定义模型 ID。
 除 `OpenAI Codex` 选项外，其余新增入口默认都是 Claude-compatible 配置。
+
+### Codex 配置同步
+
+当你选择 `command = "codex"` 的配置启动时，`ccc` 会自动同步：
+- `~/.codex/config.toml`
+  - `model_provider = "codex"`
+  - `model = "<当前模型>"`
+  - `[model_providers.codex].base_url = "<你的 OpenAI 兼容 /v1 地址>"`
+  - `wire_api = "responses"`
+- `~/.codex/auth.json`
+  - `OPENAI_API_KEY`
+
+如果你在配置中填的是根域名，例如 `https://relay.example.com`，`ccc` 会自动规范化成 `https://relay.example.com/v1` 再写入 Codex 配置。
 
 ### 示例配置
 
