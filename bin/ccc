@@ -472,6 +472,23 @@ get_command_bypass_flag() {
     fi
 }
 
+normalize_codex_base_url() {
+    local base_url="$1"
+    local trimmed="${base_url%/}"
+
+    if [[ "$trimmed" == */v1 ]]; then
+        echo "$trimmed"
+    elif [[ "$trimmed" == */v1/models ]]; then
+        echo "${trimmed%/models}"
+    elif [[ "$trimmed" == */models ]]; then
+        echo "${trimmed%/models}/v1"
+    elif [[ "$trimmed" == */responses ]]; then
+        echo "${trimmed%/responses}/v1"
+    else
+        echo "$trimmed/v1"
+    fi
+}
+
 get_env_vars() {
     local model_index=$1
     if command -v jq &> /dev/null; then
@@ -559,6 +576,10 @@ run_with_model() {
     local api_key=$(get_model_env_value "$model_index" "$api_key_key")
     local main_model=$(get_model_env_value "$model_index" "$main_model_key")
     local fast_model=$(get_model_env_value "$model_index" "$fast_model_key")
+
+    if [ "$command_name" = "codex" ]; then
+        base_url=$(normalize_codex_base_url "$base_url")
+    fi
 
     # Default fast model to main model if not set
     if [ -z "$fast_model" ]; then
@@ -830,7 +851,7 @@ add_codex_model() {
     read -p "Display name (default: Codex ($main_model)): " model_name
     [ -z "$model_name" ] && model_name="Codex ($main_model)"
 
-    save_model_config "$model_name" "$base_url" "$api_key" "$main_model" "" "codex"
+    save_model_config "$model_name" "$(normalize_codex_base_url "$base_url")" "$api_key" "$main_model" "" "codex"
 }
 
 add_zhipu_model() {

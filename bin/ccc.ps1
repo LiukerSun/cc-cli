@@ -151,6 +151,29 @@ function Get-BypassFlag {
     return "--dangerously-skip-permissions"
 }
 
+function Normalize-CodexBaseUrl {
+    param(
+        [string]$BaseUrl
+    )
+
+    $trimmed = $BaseUrl.TrimEnd('/')
+
+    if ($trimmed.EndsWith('/v1')) {
+        return $trimmed
+    }
+    if ($trimmed.EndsWith('/v1/models')) {
+        return $trimmed.Substring(0, $trimmed.Length - '/models'.Length)
+    }
+    if ($trimmed.EndsWith('/models')) {
+        return $trimmed.Substring(0, $trimmed.Length - '/models'.Length) + '/v1'
+    }
+    if ($trimmed.EndsWith('/responses')) {
+        return $trimmed.Substring(0, $trimmed.Length - '/responses'.Length) + '/v1'
+    }
+
+    return "$trimmed/v1"
+}
+
 function Show-Help {
     Write-Host "Usage: ccc [OPTIONS] [MODEL_INDEX] [-- CLI_ARGS...]"
     Write-Host ""
@@ -698,7 +721,7 @@ function Add-CodexModel {
         $name = "Codex ($mainModel)"
     }
 
-    Save-ModelConfig -Name $name -BaseUrl $baseUrl -ApiKey $apiKey -MainModel $mainModel -FastModel "" -Command "codex"
+    Save-ModelConfig -Name $name -BaseUrl (Normalize-CodexBaseUrl -BaseUrl $baseUrl) -ApiKey $apiKey -MainModel $mainModel -FastModel "" -Command "codex"
 }
 
 function Add-ZhipuModel {
@@ -1482,6 +1505,10 @@ function Run-WithModel {
     # Default fast model to main model if not set
     if (-not $fastModel) {
         $fastModel = $mainModel
+    }
+
+    if ($command -eq "codex") {
+        $baseUrl = Normalize-CodexBaseUrl -BaseUrl $baseUrl
     }
 
     if ($command -ne "codex") {
