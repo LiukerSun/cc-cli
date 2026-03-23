@@ -26,6 +26,178 @@ INSTALL_DIR="$HOME/.cc-cli"
 BIN_DIR="$HOME/bin"
 CONFIG_FILE="$HOME/.cc-config.json"
 
+get_cli_package_name() {
+    local command_name="$1"
+    case "$command_name" in
+        claude) echo "@anthropic-ai/claude-code" ;;
+        codex) echo "@openai/codex" ;;
+        *) return 1 ;;
+    esac
+}
+
+get_cli_min_node_version() {
+    local command_name="$1"
+    case "$command_name" in
+        claude) echo "18.0.0" ;;
+        codex) echo "16.0.0" ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_semver() {
+    local version="${1#v}"
+    version="${version#>=}"
+    version="${version%%-*}"
+    version="${version%%+*}"
+
+    local IFS=.
+    local parts=()
+    read -r -a parts <<< "$version"
+
+    local major="${parts[0]:-0}"
+    local minor="${parts[1]:-0}"
+    local patch="${parts[2]:-0}"
+
+    echo "${major}.${minor}.${patch}"
+}
+
+compare_semver() {
+    local left
+    local right
+    left=$(normalize_semver "$1")
+    right=$(normalize_semver "$2")
+
+    local IFS=.
+    local left_parts=()
+    local right_parts=()
+    read -r -a left_parts <<< "$left"
+    read -r -a right_parts <<< "$right"
+
+    local index
+    for index in 0 1 2; do
+        local left_part="${left_parts[$index]:-0}"
+        local right_part="${right_parts[$index]:-0}"
+        if ((10#$left_part > 10#$right_part)); then
+            echo "greater"
+            return 0
+        fi
+        if ((10#$left_part < 10#$right_part)); then
+            echo "less"
+            return 0
+        fi
+    done
+
+    echo "equal"
+}
+
+version_lt() {
+    [ "$(compare_semver "$1" "$2")" = "less" ]
+}
+
+prepend_npm_global_bin_to_path() {
+    if ! command -v npm >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local npm_prefix
+    npm_prefix=$(npm config get prefix 2>/dev/null | tr -d '\r\n')
+    if [ -z "$npm_prefix" ] || [ "$npm_prefix" = "undefined" ]; then
+        return 0
+    fi
+
+    local npm_bin="$npm_prefix/bin"
+    if [ -d "$npm_bin" ] && [[ ":$PATH:" != *":$npm_bin:"* ]]; then
+        export PATH="$npm_bin:$PATH"
+        hash -r
+    fi
+}
+
+check_node_and_npm_for_command() {
+    local command_name="$1"
+    local required_version
+    required_version=$(get_cli_min_node_version "$command_name") || {
+        echo -e "${YELLOW}⚠ Unsupported CLI command: $command_name${NC}"
+        return 1
+    }
+
+    if ! command -v node >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠ Skipping automatic install for $command_name: Node.js is not installed${NC}"
+        echo -e "  Current version: not installed"
+        echo -e "  Minimum required version: Node.js >= $required_version"
+        echo -e "  ccc is installed anyway. Install or upgrade Node.js before using '$command_name'."
+        return 1
+    fi
+
+    if ! command -v npm >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠ Skipping automatic install for $command_name: npm is not installed${NC}"
+        echo -e "  Current Node.js version: $(node --version 2>/dev/null | tr -d '[:space:]')"
+        echo -e "  Minimum required version: Node.js >= $required_version"
+        echo -e "  ccc is installed anyway. Install npm before using '$command_name'."
+        return 1
+    fi
+
+    local current_node_version
+    current_node_version=$(node --version 2>/dev/null | tr -d '[:space:]')
+    if version_lt "$current_node_version" "$required_version"; then
+        echo -e "${YELLOW}⚠ Skipping automatic install for $command_name: Node.js version is too old${NC}"
+        echo -e "  Current version: $current_node_version"
+        echo -e "  Minimum required version: Node.js >= $required_version"
+        echo -e "  ccc is installed anyway. Upgrade Node.js before using '$command_name'."
+        return 1
+    fi
+
+    echo -e "${GREEN}✓ Node.js $current_node_version found${NC}"
+    echo -e "${GREEN}✓ npm $(npm --version 2>/dev/null | tr -d '[:space:]') found${NC}"
+    prepend_npm_global_bin_to_path
+    return 0
+}
+
+install_missing_cli_command() {
+    local command_name="$1"
+    local package_name
+    package_name=$(get_cli_package_name "$command_name") || {
+        echo -e "${RED}✗ Unsupported CLI command: $command_name${NC}"
+        return 1
+    }
+
+    echo -e "${YELLOW}Installing missing $command_name CLI via npm ($package_name)...${NC}"
+    if ! npm install -g "$package_name"; then
+        echo -e "${RED}✗ Failed to install $command_name CLI automatically${NC}"
+        echo -e "  Try manually: npm install -g $package_name"
+        return 1
+    fi
+
+    prepend_npm_global_bin_to_path
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo -e "${RED}✗ $command_name CLI is still not available after installation${NC}"
+        echo -e "  Try manually: npm install -g $package_name"
+        return 1
+    fi
+
+    echo -e "${GREEN}✓ $command_name CLI installed${NC}"
+}
+
+check_and_prepare_cli_commands() {
+    local command_name
+
+    prepend_npm_global_bin_to_path
+
+    for command_name in claude codex; do
+        if command -v "$command_name" >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ ${command_name} CLI found${NC}"
+        else
+            echo -e "${YELLOW}⚠ ${command_name} CLI not found${NC}"
+            if check_node_and_npm_for_command "$command_name"; then
+                if ! install_missing_cli_command "$command_name"; then
+                    echo -e "${YELLOW}⚠ Continuing installation without $command_name CLI${NC}"
+                fi
+            fi
+        fi
+    done
+
+    echo ""
+}
+
 echo -e "${BLUE}═══════════════════════════════════════${NC}"
 echo -e "${BLUE}  CC-CLI Installer v${VERSION}${NC}"
 echo -e "${BLUE}═══════════════════════════════════════${NC}"
@@ -42,15 +214,7 @@ check_requirements() {
     fi
     echo -e "${GREEN}✓ Bash ${BASH_VERSION%%(*)} found${NC}"
     
-    # Check for claude command
-    if ! command -v claude &> /dev/null; then
-        echo -e "${YELLOW}⚠ Claude CLI not found (optional)${NC}"
-        echo -e "  Install from: https://claude.ai"
-    else
-        echo -e "${GREEN}✓ Claude CLI found${NC}"
-    fi
-    
-    echo ""
+    check_and_prepare_cli_commands
 }
 
 # Create directories

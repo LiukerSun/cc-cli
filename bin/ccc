@@ -54,6 +54,8 @@ usage() {
     echo "  --uninstall       Uninstall cc-cli"
     echo "  -h, --help        Show this help message"
     echo ""
+    echo "Missing Claude/Codex CLIs are installed automatically with npm when Node.js is available."
+    echo ""
     echo "Note: When the selected command is 'claude', this command also updates"
     echo "      ~/.claude/settings.json so team subagents use the same model."
     echo ""
@@ -125,6 +127,31 @@ compare_versions() {
     done
     
     echo "less"
+}
+
+normalize_semver() {
+    local version="${1#v}"
+    version="${version#>=}"
+    version="${version%%-*}"
+    version="${version%%+*}"
+
+    local IFS=.
+    local parts=()
+    read -r -a parts <<< "$version"
+
+    local major="${parts[0]:-0}"
+    local minor="${parts[1]:-0}"
+    local patch="${parts[2]:-0}"
+
+    echo "${major}.${minor}.${patch}"
+}
+
+version_lt() {
+    local left
+    local right
+    left=$(normalize_semver "$1")
+    right=$(normalize_semver "$2")
+    [ "$(compare_versions "$left" "$right")" = "less" ]
 }
 
 upgrade() {
@@ -472,6 +499,117 @@ get_command_bypass_flag() {
     fi
 }
 
+get_cli_package_name() {
+    local command_name="$1"
+    case "$command_name" in
+        claude) echo "@anthropic-ai/claude-code" ;;
+        codex) echo "@openai/codex" ;;
+        *) return 1 ;;
+    esac
+}
+
+get_cli_min_node_version() {
+    local command_name="$1"
+    case "$command_name" in
+        claude) echo "18.0.0" ;;
+        codex) echo "16.0.0" ;;
+        *) return 1 ;;
+    esac
+}
+
+prepend_npm_global_bin_to_path() {
+    if ! command -v npm >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local npm_prefix
+    npm_prefix=$(npm config get prefix 2>/dev/null | tr -d '\r\n')
+
+    if [ -z "$npm_prefix" ] || [ "$npm_prefix" = "undefined" ]; then
+        return 0
+    fi
+
+    local npm_bin="$npm_prefix/bin"
+    if [ -d "$npm_bin" ] && [[ ":$PATH:" != *":$npm_bin:"* ]]; then
+        export PATH="$npm_bin:$PATH"
+        hash -r
+    fi
+}
+
+ensure_node_and_npm_for_cli() {
+    local command_name="$1"
+    local min_node_version
+    min_node_version=$(get_cli_min_node_version "$command_name") || {
+        echo "Error: Unsupported CLI command: $command_name"
+        return 1
+    }
+
+    if ! command -v node >/dev/null 2>&1; then
+        echo "Error: Cannot install $command_name CLI automatically because Node.js is not installed."
+        echo "Current version: not installed"
+        echo "Minimum required version: Node.js >= $min_node_version"
+        echo "Please install or upgrade Node.js, then rerun ccc."
+        return 1
+    fi
+
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "Error: Cannot install $command_name CLI automatically because npm is not installed."
+        echo "Current version: Node.js $(node --version 2>/dev/null | tr -d '[:space:]')"
+        echo "Minimum required version: Node.js >= $min_node_version"
+        echo "Please install npm (usually bundled with Node.js), then rerun ccc."
+        return 1
+    fi
+
+    local current_node_version
+    current_node_version=$(node --version 2>/dev/null | tr -d '[:space:]')
+    if version_lt "$current_node_version" "$min_node_version"; then
+        echo "Error: Node.js version is too old to install $command_name CLI."
+        echo "Current version: $current_node_version"
+        echo "Minimum required version: Node.js >= $min_node_version"
+        echo "Please upgrade Node.js, then rerun ccc."
+        return 1
+    fi
+
+    prepend_npm_global_bin_to_path
+}
+
+install_cli_command() {
+    local command_name="$1"
+    local package_name
+    package_name=$(get_cli_package_name "$command_name") || {
+        echo "Error: Unsupported CLI command: $command_name"
+        return 1
+    }
+
+    echo "$command_name CLI not found. Attempting to install $package_name via npm..."
+    if ! npm install -g "$package_name"; then
+        echo "Error: Failed to install $command_name CLI automatically."
+        echo "Try manually: npm install -g $package_name"
+        return 1
+    fi
+
+    prepend_npm_global_bin_to_path
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "Error: $command_name CLI is still not available after installation."
+        echo "Try manually: npm install -g $package_name"
+        return 1
+    fi
+
+    echo "✓ Installed $command_name CLI"
+}
+
+ensure_cli_command() {
+    local command_name="$1"
+
+    prepend_npm_global_bin_to_path
+    if command -v "$command_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    ensure_node_and_npm_for_cli "$command_name" || return 1
+    install_cli_command "$command_name"
+}
+
 normalize_codex_base_url() {
     local base_url="$1"
     local trimmed="${base_url%/}"
@@ -595,6 +733,10 @@ run_with_model() {
 
     echo "───────────────────────────────────────"
 
+    if [ "$only_env" != "true" ] && ! ensure_cli_command "$command_name"; then
+        exit 1
+    fi
+
     if [ "$command_name" != "codex" ]; then
         update_claude_settings "$main_model" "$fast_model"
         echo "✓ Updated Claude settings (for team subagent)"
@@ -643,11 +785,6 @@ run_with_model() {
     local exec_args=("${cli_args[@]}")
     if [ "$skip_perm" = "true" ]; then
         exec_args=("$(get_command_bypass_flag "$command_name")" "${exec_args[@]}")
-    fi
-
-    if ! command -v "$command_name" >/dev/null 2>&1; then
-        echo "Error: $command_name CLI not found"
-        exit 1
     fi
 
     exec "$command_name" "${exec_args[@]}"

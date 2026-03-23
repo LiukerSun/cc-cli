@@ -12,11 +12,18 @@
 - **Codex 配置同步** - 启动 Codex 时自动同步本机配置文件
   - 更新 `~/.codex/config.toml` 的 `model`、`model_provider` 和 `[model_providers.codex]`
   - 更新 `~/.codex/auth.json` 的 `OPENAI_API_KEY`
+- **CLI 自动检测与安装** - 安装脚本和启动脚本现在会自动检测 `claude` / `codex`
+  - 缺失命令时先检查 `node` / `npm` 是否可用
+  - 根据缺失 CLI 校验最低 Node.js 版本，并显示当前版本与最低要求
+  - 条件满足时自动执行 `npm install -g` 补装缺失 CLI
+  - 安装器阶段采用 best-effort 策略，不会因为未使用的 CLI 缺失而中断 `ccc` 安装
+  - 安装失败时输出可手动执行的安装命令
 
 ### 变更
 - **配置校验逻辑** - 根据 `command` 动态校验 `ANTHROPIC_*` 或 `OPENAI_*` 字段
 - **Provider 菜单** - `ccc -a` 改为单层 provider 选择，默认新增项走 Claude-compatible，Codex 单独作为一个 provider
 - **API Key 展示** - `ccc --show` 现在可以同时展示 Claude-compatible 和 Codex 配置
+- **安装文档** - README 补充自动安装行为、Node.js 版本要求和手动安装命令
 
 ### 修复
 - **Codex 启动链路** - 修复 Bash 版本读取 `command` 时错误回退到 `claude` 的问题
