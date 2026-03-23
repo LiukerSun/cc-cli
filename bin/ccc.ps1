@@ -12,6 +12,14 @@ $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
 $CLAUDE_SETTINGS_FILE = "$env:USERPROFILE\.claude\settings.json"
 $CODEX_CONFIG_FILE = "$env:USERPROFILE\.codex\config.toml"
 $CODEX_AUTH_FILE = "$env:USERPROFILE\.codex\auth.json"
+$CLI_PACKAGES = @{
+    claude = "@anthropic-ai/claude-code"
+    codex = "@openai/codex"
+}
+$CLI_MIN_NODE_VERSIONS = @{
+    claude = "18.0.0"
+    codex = "16.0.0"
+}
 
 function Save-JsonNoBOM {
     param(
@@ -151,6 +159,161 @@ function Get-BypassFlag {
     return "--dangerously-skip-permissions"
 }
 
+function Get-CliPackageName {
+    param(
+        [string]$CommandName
+    )
+
+    return $CLI_PACKAGES[$CommandName]
+}
+
+function Get-CliMinimumNodeVersion {
+    param(
+        [string]$CommandName
+    )
+
+    return $CLI_MIN_NODE_VERSIONS[$CommandName]
+}
+
+function ConvertTo-SemanticVersionString {
+    param(
+        [string]$VersionString
+    )
+
+    $clean = ([string]$VersionString).Trim()
+    $clean = $clean.TrimStart('v')
+    $clean = $clean -replace '^>=\s*', ''
+    $clean = $clean -replace '[-+].*$', ''
+
+    $parts = @($clean.Split('.', [System.StringSplitOptions]::RemoveEmptyEntries))
+    while ($parts.Count -lt 3) {
+        $parts += "0"
+    }
+
+    return "$($parts[0]).$($parts[1]).$($parts[2])"
+}
+
+function Test-VersionLessThan {
+    param(
+        [string]$Left,
+        [string]$Right
+    )
+
+    return ([Version](ConvertTo-SemanticVersionString -VersionString $Left)) -lt ([Version](ConvertTo-SemanticVersionString -VersionString $Right))
+}
+
+function Add-NpmGlobalBinToPath {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        return
+    }
+
+    $npmPrefix = (& npm config get prefix 2>$null | Out-String).Trim()
+    if (-not $npmPrefix -or $npmPrefix -eq "undefined") {
+        return
+    }
+
+    $candidate = $npmPrefix
+    if ($env:OS -ne "Windows_NT") {
+        $unixBin = Join-Path $npmPrefix "bin"
+        if (Test-Path $unixBin) {
+            $candidate = $unixBin
+        }
+    }
+
+    $pathEntries = @($env:PATH -split [System.IO.Path]::PathSeparator)
+    if ($pathEntries -notcontains $candidate) {
+        $env:PATH = "$candidate$([System.IO.Path]::PathSeparator)$env:PATH"
+    }
+}
+
+function Ensure-NodeAndNpmForCli {
+    param(
+        [string]$CommandName
+    )
+
+    $minVersion = Get-CliMinimumNodeVersion -CommandName $CommandName
+    if (-not $minVersion) {
+        Write-Error "Unsupported CLI command: $CommandName"
+        return $false
+    }
+
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Error "Cannot install $CommandName CLI automatically because Node.js is not installed."
+        Write-Host "Current version: not installed"
+        Write-Host "Minimum required version: Node.js >= $minVersion"
+        Write-Host "Please install or upgrade Node.js, then rerun ccc."
+        return $false
+    }
+
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
+        Write-Error "Cannot install $CommandName CLI automatically because npm is not installed."
+        Write-Host "Current version: $currentNodeVersion"
+        Write-Host "Minimum required version: Node.js >= $minVersion"
+        Write-Host "Please install npm (usually bundled with Node.js), then rerun ccc."
+        return $false
+    }
+
+    $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
+    if (Test-VersionLessThan -Left $currentNodeVersion -Right $minVersion) {
+        Write-Error "Node.js version is too old to install $CommandName CLI."
+        Write-Host "Current version: $currentNodeVersion"
+        Write-Host "Minimum required version: Node.js >= $minVersion"
+        Write-Host "Please upgrade Node.js, then rerun ccc."
+        return $false
+    }
+
+    Add-NpmGlobalBinToPath
+    return $true
+}
+
+function Install-CliCommand {
+    param(
+        [string]$CommandName
+    )
+
+    $packageName = Get-CliPackageName -CommandName $CommandName
+    if (-not $packageName) {
+        Write-Error "Unsupported CLI command: $CommandName"
+        return $false
+    }
+
+    Write-Warning "$CommandName CLI not found. Attempting to install $packageName via npm..."
+    & npm install -g $packageName
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to install $CommandName CLI automatically."
+        Write-Host "Try manually: npm install -g $packageName"
+        return $false
+    }
+
+    Add-NpmGlobalBinToPath
+    if (-not (Get-Command $CommandName -ErrorAction SilentlyContinue)) {
+        Write-Error "$CommandName CLI is still not available after installation."
+        Write-Host "Try manually: npm install -g $packageName"
+        return $false
+    }
+
+    Write-Success "[OK] Installed $CommandName CLI"
+    return $true
+}
+
+function Ensure-CliCommand {
+    param(
+        [string]$CommandName
+    )
+
+    Add-NpmGlobalBinToPath
+    if (Get-Command $CommandName -ErrorAction SilentlyContinue) {
+        return $true
+    }
+
+    if (-not (Ensure-NodeAndNpmForCli -CommandName $CommandName)) {
+        return $false
+    }
+
+    return (Install-CliCommand -CommandName $CommandName)
+}
+
 function Normalize-CodexBaseUrl {
     param(
         [string]$BaseUrl
@@ -193,6 +356,8 @@ function Show-Help {
     Write-Host "  -V, --version     Show version"
     Write-Host "  --uninstall       Uninstall cc-cli"
     Write-Host "  -h, --help        Show this help message"
+    Write-Host ""
+    Write-Host "Missing Claude/Codex CLIs are installed automatically with npm when Node.js is available."
     Write-Host ""
     Write-Host "Note: When the selected command is 'claude', this command also updates"
     Write-Host "      ~/.claude/settings.json so team subagents use the same model."
@@ -1498,6 +1663,10 @@ function Run-WithModel {
     
     Write-Host "-----------------------------------"
 
+    if (-not $OnlyEnv -and -not (Ensure-CliCommand -CommandName $command)) {
+        exit 1
+    }
+
     # Get model environment values
     $mainModel = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.MainModel
     $fastModel = Get-ModelEnvValue -ModelIndex $ModelIndex -KeyName $keys.FastModel
@@ -1575,13 +1744,7 @@ function Run-WithModel {
         $commandArgs = @((Get-BypassFlag -Command $command)) + $commandArgs
     }
 
-    if (Get-Command $command -ErrorAction SilentlyContinue) {
-        & $command @commandArgs
-    } else {
-        Write-Error "$command CLI not found"
-        Write-Host "Install the required CLI and ensure '$command' is on PATH."
-        exit 1
-    }
+    & $command @commandArgs
 }
 
 $skipPerm = $false

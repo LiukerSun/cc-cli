@@ -26,6 +26,7 @@
 
 - 🎯 **交互式选择** - 使用上下键轻松切换模型
 - 🚀 **直接启动** - 无需手动切换配置，直接启动 Claude 或 Codex
+- 🛠️ **CLI 自动补装** - 检测缺失的 Claude / Codex CLI，并在 Node.js / npm 可用时自动通过 npm 安装
 - 🔑 **API Key 管理** - 交互式添加、查看和编辑配置
 - 🎨 **彩色输出** - 美观的终端界面
 - ⚡ **零依赖** - 纯 Bash 实现，无外部依赖
@@ -75,6 +76,11 @@ cd cc-cli
 # Windows
 .\install.ps1
 ```
+
+> 安装器会自动检测 `claude` 和 `codex` 是否已安装。
+> 缺失时会尝试执行 `npm install -g` 自动补装。
+> 如果缺少 Node.js / npm，或 Node.js 版本过低，会明确提示当前版本和最低要求。
+> 当前最低要求为：`claude` 需要 Node.js `>= 18.0.0`，`codex` 需要 Node.js `>= 16.0.0`。
 
 ### 验证安装
 
@@ -459,10 +465,17 @@ claude
 
 ### 常见问题
 
-**1. Claude 未安装**
+**1. Claude / Codex 未安装或 Node.js 版本过低**
 ```bash
-# 安装 Claude CLI
-# 访问 https://claude.ai 下载
+# ccc / install.sh / install.ps1 会优先自动检测并尝试安装缺失 CLI
+
+# 如需手动安装：
+npm install -g @anthropic-ai/claude-code
+npm install -g @openai/codex
+
+# 如果提示 Node.js 版本过低：
+# claude 需要 Node.js >= 18.0.0
+# codex 需要 Node.js >= 16.0.0
 ```
 
 **2. 配置文件损坏**

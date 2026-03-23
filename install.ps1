@@ -31,6 +31,14 @@ if ($scriptPath) {
 $INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
 $CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
 $SCRIPT_FILE = "$env:USERPROFILE\bin\ccc.ps1"
+$CLI_PACKAGES = @{
+    claude = "@anthropic-ai/claude-code"
+    codex = "@openai/codex"
+}
+$CLI_MIN_NODE_VERSIONS = @{
+    claude = "18.0.0"
+    codex = "16.0.0"
+}
 
 # Colors
 function Write-ColorOutput($ForegroundColor) {
@@ -58,6 +66,190 @@ function Save-FileNoBOM {
     [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
 }
 
+function Get-CliPackageName {
+    param(
+        [string]$CommandName
+    )
+
+    return $CLI_PACKAGES[$CommandName]
+}
+
+function Get-CliMinimumNodeVersion {
+    param(
+        [string]$CommandName
+    )
+
+    return $CLI_MIN_NODE_VERSIONS[$CommandName]
+}
+
+function ConvertTo-SemanticVersionString {
+    param(
+        [string]$VersionString
+    )
+
+    $clean = ([string]$VersionString).Trim()
+    $clean = $clean.TrimStart('v')
+    $clean = $clean -replace '^>=\s*', ''
+    $clean = $clean -replace '[-+].*$', ''
+
+    $parts = @($clean.Split('.', [System.StringSplitOptions]::RemoveEmptyEntries))
+    while ($parts.Count -lt 3) {
+        $parts += "0"
+    }
+
+    return "$($parts[0]).$($parts[1]).$($parts[2])"
+}
+
+function Test-VersionLessThan {
+    param(
+        [string]$Left,
+        [string]$Right
+    )
+
+    return ([Version](ConvertTo-SemanticVersionString -VersionString $Left)) -lt ([Version](ConvertTo-SemanticVersionString -VersionString $Right))
+}
+
+function Add-NpmGlobalBinToPath {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        return
+    }
+
+    $npmPrefix = (& npm config get prefix 2>$null | Out-String).Trim()
+    if (-not $npmPrefix -or $npmPrefix -eq "undefined") {
+        return
+    }
+
+    $candidate = $npmPrefix
+    if ($env:OS -ne "Windows_NT") {
+        $unixBin = Join-Path $npmPrefix "bin"
+        if (Test-Path $unixBin) {
+            $candidate = $unixBin
+        }
+    }
+
+    $pathEntries = @($env:PATH -split [System.IO.Path]::PathSeparator)
+    if ($pathEntries -notcontains $candidate) {
+        $env:PATH = "$candidate$([System.IO.Path]::PathSeparator)$env:PATH"
+    }
+}
+
+function Get-RequiredNodeVersion {
+    param(
+        [string[]]$CommandNames
+    )
+
+    $requiredVersion = "0.0.0"
+    foreach ($commandName in $CommandNames) {
+        $cliVersion = Get-CliMinimumNodeVersion -CommandName $commandName
+        if ($cliVersion -and (Test-VersionLessThan -Left $requiredVersion -Right $cliVersion)) {
+            $requiredVersion = $cliVersion
+        }
+    }
+
+    return $requiredVersion
+}
+
+function Ensure-NodeAndNpmForCommands {
+    param(
+        [string[]]$CommandNames
+    )
+
+    $requiredVersion = Get-RequiredNodeVersion -CommandNames $CommandNames
+    $commandList = $CommandNames -join ", "
+
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Error "[X] Node.js is required to install missing CLI tools: $commandList"
+        Write-Host "  Current version: not installed"
+        Write-Host "  Minimum required version: Node.js >= $requiredVersion"
+        Write-Host "  Please install or upgrade Node.js, then rerun the installer."
+        return $false
+    }
+
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
+        Write-Error "[X] npm is required to install missing CLI tools: $commandList"
+        Write-Host "  Current Node.js version: $currentNodeVersion"
+        Write-Host "  Minimum required version: Node.js >= $requiredVersion"
+        Write-Host "  Please install npm (usually bundled with Node.js), then rerun the installer."
+        return $false
+    }
+
+    $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
+    if (Test-VersionLessThan -Left $currentNodeVersion -Right $requiredVersion) {
+        Write-Error "[X] Node.js version is too old to install missing CLI tools: $commandList"
+        Write-Host "  Current version: $currentNodeVersion"
+        Write-Host "  Minimum required version: Node.js >= $requiredVersion"
+        Write-Host "  Please upgrade Node.js, then rerun the installer."
+        return $false
+    }
+
+    Write-Success "[OK] Node.js $currentNodeVersion found"
+    Write-Success "[OK] npm $((& npm --version 2>$null | Out-String).Trim()) found"
+    Add-NpmGlobalBinToPath
+    return $true
+}
+
+function Install-MissingCliCommand {
+    param(
+        [string]$CommandName
+    )
+
+    $packageName = Get-CliPackageName -CommandName $CommandName
+    if (-not $packageName) {
+        Write-Error "[X] Unsupported CLI command: $CommandName"
+        return $false
+    }
+
+    Write-Warning "Installing missing $CommandName CLI via npm ($packageName)..."
+    & npm install -g $packageName
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "[X] Failed to install $CommandName CLI automatically"
+        Write-Host "  Try manually: npm install -g $packageName"
+        return $false
+    }
+
+    Add-NpmGlobalBinToPath
+    if (-not (Get-Command $CommandName -ErrorAction SilentlyContinue)) {
+        Write-Error "[X] $CommandName CLI is still not available after installation"
+        Write-Host "  Try manually: npm install -g $packageName"
+        return $false
+    }
+
+    Write-Success "[OK] $CommandName CLI installed"
+    return $true
+}
+
+function Check-AndPrepareCliCommands {
+    Add-NpmGlobalBinToPath
+
+    $missingCommands = @()
+    foreach ($commandName in @("claude", "codex")) {
+        if (Get-Command $commandName -ErrorAction SilentlyContinue) {
+            Write-Success "[OK] $commandName CLI found"
+        } else {
+            Write-Warning "[!] $commandName CLI not found"
+            $missingCommands += $commandName
+        }
+    }
+
+    if ($missingCommands.Count -eq 0) {
+        Write-Host ""
+        return
+    }
+
+    if (-not (Ensure-NodeAndNpmForCommands -CommandNames $missingCommands)) {
+        exit 1
+    }
+
+    foreach ($commandName in $missingCommands) {
+        if (-not (Install-MissingCliCommand -CommandName $commandName)) {
+            exit 1
+        }
+    }
+
+    Write-Host ""
+}
+
 # Banner
 Write-Info "==================================="
 Write-Info "  CC-CLI Installer v$VERSION (PowerShell)"
@@ -75,15 +267,7 @@ function Check-Requirements {
     }
     Write-Success "[OK] PowerShell $($PSVersionTable.PSVersion) found"
     
-    # Check for claude command
-    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Warning "[!] Claude CLI not found (optional)"
-        Write-Host "  Install from: https://claude.ai"
-    } else {
-        Write-Success "[OK] Claude CLI found"
-    }
-    
-    Write-Host ""
+    Check-AndPrepareCliCommands
 }
 
 # Create directories
