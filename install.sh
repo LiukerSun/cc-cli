@@ -112,54 +112,44 @@ prepend_npm_global_bin_to_path() {
     fi
 }
 
-get_required_node_version_for_commands() {
-    local required_version="0.0.0"
-    local command_name
-    for command_name in "$@"; do
-        local cli_version
-        cli_version=$(get_cli_min_node_version "$command_name") || continue
-        if version_lt "$required_version" "$cli_version"; then
-            required_version="$cli_version"
-        fi
-    done
-
-    echo "$required_version"
-}
-
-check_node_and_npm_for_commands() {
-    local missing_commands=("$@")
+check_node_and_npm_for_command() {
+    local command_name="$1"
     local required_version
-    required_version=$(get_required_node_version_for_commands "${missing_commands[@]}")
+    required_version=$(get_cli_min_node_version "$command_name") || {
+        echo -e "${YELLOW}⚠ Unsupported CLI command: $command_name${NC}"
+        return 1
+    }
 
     if ! command -v node >/dev/null 2>&1; then
-        echo -e "${RED}✗ Node.js is required to install missing CLI tools: ${missing_commands[*]}${NC}"
+        echo -e "${YELLOW}⚠ Skipping automatic install for $command_name: Node.js is not installed${NC}"
         echo -e "  Current version: not installed"
         echo -e "  Minimum required version: Node.js >= $required_version"
-        echo -e "  Please install or upgrade Node.js, then rerun the installer."
+        echo -e "  ccc is installed anyway. Install or upgrade Node.js before using '$command_name'."
         return 1
     fi
 
     if ! command -v npm >/dev/null 2>&1; then
-        echo -e "${RED}✗ npm is required to install missing CLI tools: ${missing_commands[*]}${NC}"
+        echo -e "${YELLOW}⚠ Skipping automatic install for $command_name: npm is not installed${NC}"
         echo -e "  Current Node.js version: $(node --version 2>/dev/null | tr -d '[:space:]')"
         echo -e "  Minimum required version: Node.js >= $required_version"
-        echo -e "  Please install npm (usually bundled with Node.js), then rerun the installer."
+        echo -e "  ccc is installed anyway. Install npm before using '$command_name'."
         return 1
     fi
 
     local current_node_version
     current_node_version=$(node --version 2>/dev/null | tr -d '[:space:]')
     if version_lt "$current_node_version" "$required_version"; then
-        echo -e "${RED}✗ Node.js version is too old to install missing CLI tools: ${missing_commands[*]}${NC}"
+        echo -e "${YELLOW}⚠ Skipping automatic install for $command_name: Node.js version is too old${NC}"
         echo -e "  Current version: $current_node_version"
         echo -e "  Minimum required version: Node.js >= $required_version"
-        echo -e "  Please upgrade Node.js, then rerun the installer."
+        echo -e "  ccc is installed anyway. Upgrade Node.js before using '$command_name'."
         return 1
     fi
 
     echo -e "${GREEN}✓ Node.js $current_node_version found${NC}"
     echo -e "${GREEN}✓ npm $(npm --version 2>/dev/null | tr -d '[:space:]') found${NC}"
     prepend_npm_global_bin_to_path
+    return 0
 }
 
 install_missing_cli_command() {
@@ -189,7 +179,6 @@ install_missing_cli_command() {
 
 check_and_prepare_cli_commands() {
     local command_name
-    local missing_commands=()
 
     prepend_npm_global_bin_to_path
 
@@ -198,21 +187,12 @@ check_and_prepare_cli_commands() {
             echo -e "${GREEN}✓ ${command_name} CLI found${NC}"
         else
             echo -e "${YELLOW}⚠ ${command_name} CLI not found${NC}"
-            missing_commands+=("$command_name")
+            if check_node_and_npm_for_command "$command_name"; then
+                if ! install_missing_cli_command "$command_name"; then
+                    echo -e "${YELLOW}⚠ Continuing installation without $command_name CLI${NC}"
+                fi
+            fi
         fi
-    done
-
-    if [ "${#missing_commands[@]}" -eq 0 ]; then
-        echo ""
-        return 0
-    fi
-
-    if ! check_node_and_npm_for_commands "${missing_commands[@]}"; then
-        exit 1
-    fi
-
-    for command_name in "${missing_commands[@]}"; do
-        install_missing_cli_command "$command_name" || exit 1
     done
 
     echo ""

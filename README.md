@@ -78,8 +78,8 @@ cd cc-cli
 ```
 
 > 安装器会自动检测 `claude` 和 `codex` 是否已安装。
-> 缺失时会尝试执行 `npm install -g` 自动补装。
-> 如果缺少 Node.js / npm，或 Node.js 版本过低，会明确提示当前版本和最低要求。
+> 缺失时会尽力执行 `npm install -g` 自动补装，但不会因为未使用的 CLI 缺失而中断 `ccc` 本身的安装。
+> 如果缺少 Node.js / npm，或 Node.js 版本过低，会明确提示当前版本和最低要求；首次实际运行对应命令时，`ccc` 也会再次按需尝试安装。
 > 当前最低要求为：`claude` 需要 Node.js `>= 18.0.0`，`codex` 需要 Node.js `>= 16.0.0`。
 
 ### 验证安装
@@ -468,6 +468,7 @@ claude
 **1. Claude / Codex 未安装或 Node.js 版本过低**
 ```bash
 # ccc / install.sh / install.ps1 会优先自动检测并尝试安装缺失 CLI
+# 安装器阶段为 best-effort，不会因为未使用的 CLI 缺失而中断 ccc 安装
 
 # 如需手动安装：
 npm install -g @anthropic-ai/claude-code

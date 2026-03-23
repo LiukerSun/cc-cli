@@ -133,53 +133,40 @@ function Add-NpmGlobalBinToPath {
     }
 }
 
-function Get-RequiredNodeVersion {
+function Ensure-NodeAndNpmForCommand {
     param(
-        [string[]]$CommandNames
+        [string]$CommandName
     )
 
-    $requiredVersion = "0.0.0"
-    foreach ($commandName in $CommandNames) {
-        $cliVersion = Get-CliMinimumNodeVersion -CommandName $commandName
-        if ($cliVersion -and (Test-VersionLessThan -Left $requiredVersion -Right $cliVersion)) {
-            $requiredVersion = $cliVersion
-        }
+    $requiredVersion = Get-CliMinimumNodeVersion -CommandName $CommandName
+    if (-not $requiredVersion) {
+        Write-Warning "[!] Unsupported CLI command: $CommandName"
+        return $false
     }
 
-    return $requiredVersion
-}
-
-function Ensure-NodeAndNpmForCommands {
-    param(
-        [string[]]$CommandNames
-    )
-
-    $requiredVersion = Get-RequiredNodeVersion -CommandNames $CommandNames
-    $commandList = $CommandNames -join ", "
-
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Error "[X] Node.js is required to install missing CLI tools: $commandList"
+        Write-Warning "[!] Skipping automatic install for $CommandName: Node.js is not installed"
         Write-Host "  Current version: not installed"
         Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  Please install or upgrade Node.js, then rerun the installer."
+        Write-Host "  ccc is installed anyway. Install or upgrade Node.js before using '$CommandName'."
         return $false
     }
 
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
         $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
-        Write-Error "[X] npm is required to install missing CLI tools: $commandList"
+        Write-Warning "[!] Skipping automatic install for $CommandName: npm is not installed"
         Write-Host "  Current Node.js version: $currentNodeVersion"
         Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  Please install npm (usually bundled with Node.js), then rerun the installer."
+        Write-Host "  ccc is installed anyway. Install npm before using '$CommandName'."
         return $false
     }
 
     $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
     if (Test-VersionLessThan -Left $currentNodeVersion -Right $requiredVersion) {
-        Write-Error "[X] Node.js version is too old to install missing CLI tools: $commandList"
+        Write-Warning "[!] Skipping automatic install for $CommandName: Node.js version is too old"
         Write-Host "  Current version: $currentNodeVersion"
         Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  Please upgrade Node.js, then rerun the installer."
+        Write-Host "  ccc is installed anyway. Upgrade Node.js before using '$CommandName'."
         return $false
     }
 
@@ -222,28 +209,16 @@ function Install-MissingCliCommand {
 function Check-AndPrepareCliCommands {
     Add-NpmGlobalBinToPath
 
-    $missingCommands = @()
     foreach ($commandName in @("claude", "codex")) {
         if (Get-Command $commandName -ErrorAction SilentlyContinue) {
             Write-Success "[OK] $commandName CLI found"
         } else {
             Write-Warning "[!] $commandName CLI not found"
-            $missingCommands += $commandName
-        }
-    }
-
-    if ($missingCommands.Count -eq 0) {
-        Write-Host ""
-        return
-    }
-
-    if (-not (Ensure-NodeAndNpmForCommands -CommandNames $missingCommands)) {
-        exit 1
-    }
-
-    foreach ($commandName in $missingCommands) {
-        if (-not (Install-MissingCliCommand -CommandName $commandName)) {
-            exit 1
+            if (Ensure-NodeAndNpmForCommand -CommandName $commandName) {
+                if (-not (Install-MissingCliCommand -CommandName $commandName)) {
+                    Write-Warning "[!] Continuing installation without $commandName CLI"
+                }
+            }
         }
     }
 
