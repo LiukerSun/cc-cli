@@ -77,6 +77,7 @@ cd cc-cli
 .\install.ps1
 ```
 
+> 安装器要求系统已安装 Node.js；如果未安装，会直接退出并提示先安装 Node.js。
 > 安装器会自动检测 `claude` 和 `codex` 是否已安装。
 > 缺失时会尽力执行 `npm install -g` 自动补装，但不会因为未使用的 CLI 缺失而中断 `ccc` 本身的安装。
 > 如果缺少 Node.js / npm，或 Node.js 版本过低，会明确提示当前版本和最低要求；首次实际运行对应命令时，`ccc` 也会再次按需尝试安装。
@@ -467,8 +468,9 @@ claude
 
 **1. Claude / Codex 未安装或 Node.js 版本过低**
 ```bash
+# install.sh / install.ps1 要求机器上先有 Node.js
 # ccc / install.sh / install.ps1 会优先自动检测并尝试安装缺失 CLI
-# 安装器阶段为 best-effort，不会因为未使用的 CLI 缺失而中断 ccc 安装
+# 在 Node.js 已安装的前提下，安装器阶段对未使用 CLI 仍是 best-effort
 
 # 如需手动安装：
 npm install -g @anthropic-ai/claude-code

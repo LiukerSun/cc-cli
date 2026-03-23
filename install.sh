@@ -112,6 +112,18 @@ prepend_npm_global_bin_to_path() {
     fi
 }
 
+require_node_for_install() {
+    if ! command -v node >/dev/null 2>&1; then
+        echo -e "${RED}✗ Node.js is required to install ccc${NC}"
+        echo -e "  Current version: not installed"
+        echo -e "  Please install Node.js first, then rerun the installer."
+        return 1
+    fi
+
+    echo -e "${GREEN}✓ Node.js $(node --version 2>/dev/null | tr -d '[:space:]') found${NC}"
+    return 0
+}
+
 check_node_and_npm_for_command() {
     local command_name="$1"
     local required_version
@@ -213,6 +225,10 @@ check_requirements() {
         exit 1
     fi
     echo -e "${GREEN}✓ Bash ${BASH_VERSION%%(*)} found${NC}"
+
+    if ! require_node_for_install; then
+        exit 1
+    fi
     
     check_and_prepare_cli_commands
 }

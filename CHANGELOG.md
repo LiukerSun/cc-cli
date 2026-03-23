@@ -13,6 +13,7 @@
   - 更新 `~/.codex/config.toml` 的 `model`、`model_provider` 和 `[model_providers.codex]`
   - 更新 `~/.codex/auth.json` 的 `OPENAI_API_KEY`
 - **CLI 自动检测与安装** - 安装脚本和启动脚本现在会自动检测 `claude` / `codex`
+  - 安装器要求机器已安装 Node.js；未安装时直接退出并提示先安装 Node.js
   - 缺失命令时先检查 `node` / `npm` 是否可用
   - 根据缺失 CLI 校验最低 Node.js 版本，并显示当前版本与最低要求
   - 条件满足时自动执行 `npm install -g` 补装缺失 CLI

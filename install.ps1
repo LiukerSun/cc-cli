@@ -133,6 +133,18 @@ function Add-NpmGlobalBinToPath {
     }
 }
 
+function Require-NodeForInstall {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Error "[X] Node.js is required to install ccc"
+        Write-Host "  Current version: not installed"
+        Write-Host "  Please install Node.js first, then rerun the installer."
+        return $false
+    }
+
+    Write-Success "[OK] Node.js $((& node --version 2>$null | Out-String).Trim()) found"
+    return $true
+}
+
 function Ensure-NodeAndNpmForCommand {
     param(
         [string]$CommandName
@@ -241,6 +253,10 @@ function Check-Requirements {
         exit 1
     }
     Write-Success "[OK] PowerShell $($PSVersionTable.PSVersion) found"
+
+    if (-not (Require-NodeForInstall)) {
+        exit 1
+    }
     
     Check-AndPrepareCliCommands
 }
