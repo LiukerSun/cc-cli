@@ -29,7 +29,7 @@
 - 🛠️ **CLI 自动补装** - 检测缺失的 Claude / Codex CLI，并在 Node.js / npm 可用时自动通过 npm 安装
 - 🔑 **API Key 管理** - 交互式添加、查看和编辑配置
 - 🎨 **彩色输出** - 美观的终端界面
-- ⚡ **零依赖** - 纯 Bash 实现，无外部依赖
+- ⚡ **轻依赖** - 核心 Bash 脚本无额外依赖；安装器和 CLI 自动补装依赖 Node.js / npm
 - 🔄 **Bypass 模式** - 支持 `CLAUDE_SKIP_PERMISSIONS`
 - 📦 **配置持久化** - 自动保存和恢复上次选择
 - 🤖 **Team / Codex 配置同步** - 启动 Claude 时自动同步 `~/.claude/settings.json`；启动 Codex 时自动同步 `~/.codex/config.toml` 和 `~/.codex/auth.json`
@@ -90,9 +90,9 @@ cd cc-cli
 ccc --version
 ccc --help
 
-# Windows PowerShell (不区分大小写)
-ccc -version
-ccc -help
+# Windows PowerShell
+ccc --version
+ccc --help
 ```
 
 > 💡 Windows PowerShell 不区分大小写，`-V` 和 `-v`、`-U` 和 `-u` 等效果相同。
@@ -129,7 +129,7 @@ ccc -s    # 显示所有配置的 API keys（部分隐藏）
 ### 编辑配置
 
 ```bash
-ccc -E    # 用 vim 打开配置文件
+ccc --edit    # 用 vim 打开配置文件
 ```
 
 ### 添加新模型
@@ -240,7 +240,7 @@ Model 'Codex (gpt-5.4)' added successfully!
 ### 基础命令
 | 命令 | 说明 |
 |------|------|
-| `ccc` | 交互式选择模型并启动 Claude |
+| `ccc` | 交互式选择模型并启动对应 CLI |
 | `ccc -l, --list` | 列出所有可用模型 |
 | `ccc -c, --current` | 显示当前使用的模型 |
 | `ccc -V, --version` | 显示版本号 |
@@ -281,7 +281,7 @@ Model 'Codex (gpt-5.4)' added successfully!
     1) ZHIPU AI
   ➜ 2) MiniMax (China)        ← 当前选中（蓝色高亮）
     3) Kimi (Moonshot AI)
-  ➜ 4) claude (current)       ← 上次使用（绿色标记）
+    4) Codex (gpt-5.4)        ← 其他已保存模型
 
 ───────────────────────────────────────
 
@@ -418,10 +418,10 @@ ccc --upgrade
 
 ```bash
 # 使用 VS Code
-EDITOR=code ccc -E
+EDITOR=code ccc --edit
 
 # 使用 nano
-EDITOR=nano ccc -E
+EDITOR=nano ccc --edit
 
 # 永久修改
 echo 'export EDITOR=code' >> ~/.zshrc
@@ -479,6 +479,9 @@ npm install -g @openai/codex
 # 如果提示 Node.js 版本过低：
 # claude 需要 Node.js >= 18.0.0
 # codex 需要 Node.js >= 16.0.0
+
+# 如果运行时提示 "Cannot install claude/codex CLI automatically"
+# 表示 ccc 已安装，但当前机器还不满足目标 CLI 的运行依赖
 ```
 
 **2. 配置文件损坏**

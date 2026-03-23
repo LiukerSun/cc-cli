@@ -2,55 +2,82 @@
 
 ## 配置文件位置
 
-CC-CLI 的配置文件位于 `~/.cc-config.json`
+CC-CLI 的配置文件位于：
 
-## 配置格式
+```text
+~/.cc-config.json
+```
 
-配置文件是一个 JSON 数组，每个对象代表一个 AI 模型配置。
+配置文件是一个 JSON 数组；每个对象代表一个可选模型。
+
+## 配置结构
 
 ```json
 [
-    {
-        "name": "模型显示名称",
-        "command": "可选，默认 claude；使用 Codex 时填 codex",
-        "env": {
-            "ANTHROPIC_BASE_URL": "API 端点 URL",
-            "ANTHROPIC_AUTH_TOKEN": "API 密钥",
-            "ANTHROPIC_MODEL": "主模型 ID",
-            "ANTHROPIC_SMALL_FAST_MODEL": "快速模型 ID"
-        }
+  {
+    "name": "模型显示名称",
+    "command": "可选，默认 claude；使用 Codex 时填 codex",
+    "env": {
+      "ANTHROPIC_BASE_URL": "API 端点 URL",
+      "ANTHROPIC_AUTH_TOKEN": "API 密钥",
+      "ANTHROPIC_MODEL": "主模型 ID",
+      "ANTHROPIC_SMALL_FAST_MODEL": "快速模型 ID"
     }
+  }
 ]
 ```
 
-## 必需字段
+## 字段说明
 
-- `name` - 模型的显示名称（必填）
-- `command` - 启动命令（可选，默认 `claude`）
-- `command = "claude"` 时：
-- `env.ANTHROPIC_BASE_URL` - API 端点 URL（必填）
-- `env.ANTHROPIC_AUTH_TOKEN` - API 密钥（必填）
-- `env.ANTHROPIC_MODEL` - 主模型 ID（必填）
-- `env.ANTHROPIC_SMALL_FAST_MODEL` - 快速模型 ID（可选，默认与主模型相同)
-- `command = "codex"` 时：
-- `env.OPENAI_BASE_URL` - API 端点 URL（必填）
-- `env.OPENAI_API_KEY` - API 密钥（必填）
-- `env.OPENAI_MODEL` - 主模型 ID（必填）
+- `name`
+  - 模型显示名称，必填
+- `command`
+  - 启动命令，可选
+  - 默认值为 `claude`
+  - 目前支持：`claude`、`codex`
+- `env`
+  - 目标命令需要的环境变量集合，必填
 
-## 添加新模型
+### `command = "claude"` 时的必需字段
 
-### 方法 1：交互式添加（推荐）
+- `env.ANTHROPIC_BASE_URL`
+- `env.ANTHROPIC_AUTH_TOKEN`
+- `env.ANTHROPIC_MODEL`
+
+可选字段：
+
+- `env.ANTHROPIC_SMALL_FAST_MODEL`
+  - 未设置时默认与主模型相同
+
+### `command = "codex"` 时的必需字段
+
+- `env.OPENAI_BASE_URL`
+- `env.OPENAI_API_KEY`
+- `env.OPENAI_MODEL`
+
+可选字段：
+
+- `env.OPENAI_SMALL_FAST_MODEL`
+  - 未设置时默认与主模型相同
+
+## 推荐配置方式
+
+### 方法 1：交互式添加
 
 ```bash
 ccc --add
 ```
 
-按提示输入：
-- 提供商或手动配置
-- 所需的 API 端点 URL / API 密钥
-- 模型选择信息
+当前交互式入口包括：
 
-当选择 `codex` 时，交互流程会使用内置的 OpenAI/Codex 模型列表供选择，不请求远端 `/models`；如果需要特殊模型，也可以手动输入自定义模型 ID。
+1. ZHIPU AI
+2. Alibaba Coding Plan
+3. OpenAI Codex
+4. Manual input (Claude-compatible)
+
+其中：
+- `OpenAI Codex` 分支使用内置的 Codex 模型列表，不请求远端 `/models`
+- 其他入口默认生成 Claude-compatible 配置
 
 ### 方法 2：编辑配置文件
 
@@ -58,196 +85,158 @@ ccc --add
 ccc --edit
 ```
 
-在 JSON 数组中添加新对象。
-
 ### 方法 3：手动编辑
 
 ```bash
 nano ~/.cc-config.json
-# 或
-vim ~/.cc-config.json
 ```
 
 ## 示例配置
 
-### Claude 官方 API
+### Claude-compatible
 
 ```json
 {
-    "name": "Claude (Official)",
-    "env": {
-        "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
-        "ANTHROPIC_AUTH_TOKEN": "sk-ant-api03-xxxxx",
-        "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
-        "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-5-haiku-20241022"
-    }
+  "name": "Claude (Official)",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+    "ANTHROPIC_AUTH_TOKEN": "sk-ant-xxxxx",
+    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
+    "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-5-haiku-20241022"
+  }
 }
 ```
 
-### OpenAI 端点
+### OpenAI / Codex
 
 ```json
 {
-    "name": "OpenAI GPT-4",
-    "command": "codex",
-    "env": {
-        "OPENAI_BASE_URL": "https://api.openai.com/v1",
-        "OPENAI_API_KEY": "sk-xxxxx",
-        "OPENAI_MODEL": "gpt-4o"
-    }
+  "name": "Codex (OpenAI)",
+  "command": "codex",
+  "env": {
+    "OPENAI_BASE_URL": "https://api.openai.com/v1",
+    "OPENAI_API_KEY": "sk-xxxxx",
+    "OPENAI_MODEL": "gpt-5.4"
+  }
 }
 ```
 
-### OpenAI Codex CLI + 第三方中转
+### 第三方 OpenAI 兼容中转
 
 ```json
 {
-    "name": "Codex (API易)",
-    "command": "codex",
-    "env": {
-        "OPENAI_API_KEY": "sk-xxxxx",
-        "OPENAI_BASE_URL": "https://vip.apiyi.com/v1",
-        "OPENAI_MODEL": "o3"
-    }
+  "name": "Codex (Relay)",
+  "command": "codex",
+  "env": {
+    "OPENAI_BASE_URL": "https://relay.example.com",
+    "OPENAI_API_KEY": "sk-xxxxx",
+    "OPENAI_MODEL": "gpt-5.4-mini"
+  }
 }
 ```
 
-### 国产模型
+说明：
+- 对于 Codex 配置，`ccc` 会在运行时把根域名自动规范化为 `/v1`
+- 例如 `https://relay.example.com` 会写入为 `https://relay.example.com/v1`
 
-```json
-{
-    "name": "智谱 AI",
-    "env": {
-        "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
-        "ANTHROPIC_AUTH_TOKEN": "your-zhipu-api-key",
-        "ANTHROPIC_MODEL": "glm-4.7",
-        "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.0"
-    }
-},
-{
-    "name": "Kimi (Moonshot AI)",
-    "env": {
-        "ANTHROPIC_BASE_URL": "https://api.moonshot.cn/anthropic/",
-        "ANTHROPIC_AUTH_TOKEN": "your-kimi-api-key",
-        "ANTHROPIC_MODEL": "kimi-k2.5",
-        "ANTHROPIC_SMALL_FAST_MODEL": "kimi-k2-thinking"
-    }
-},
-{
-    "name": "阿里云百炼 (Coding Plan)",
-    "env": {
-        "ANTHROPIC_BASE_URL": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
-        "ANTHROPIC_AUTH_TOKEN": "your-dashscope-api-key",
-        "ANTHROPIC_MODEL": "qwen3.5-plus",
-        "ANTHROPIC_SMALL_FAST_MODEL": "qwen3-coder-plus"
-    }
-}
+## Codex 配置同步
+
+当选中的模型 `command = "codex"` 时，`ccc` 会自动同步：
+
+- `~/.codex/config.toml`
+  - `model_provider = "codex"`
+  - `model = "<当前模型>"`
+  - `[model_providers.codex].base_url = "<规范化后的 /v1 地址>"`
+  - `wire_api = "responses"`
+- `~/.codex/auth.json`
+  - `OPENAI_API_KEY`
+
+注意：
+- `ccc` 不会在 Codex 路径下继续注入旧的 `OPENAI_BASE_URL` 运行时环境变量
+- 相关信息会优先写入 Codex 官方配置文件
+
+## Claude Team Subagent 同步
+
+当选中的模型 `command = "claude"` 时，`ccc` 会自动更新：
+
+```text
+~/.claude/settings.json
 ```
 
-### 阿里云百炼 Coding Plan
+写入内容包括：
 
-阿里云百炼 Coding Plan 提供最新最强的编程模型，兼容 Anthropic API 协议。
+- `CLAUDE_CODE_MODEL`
+- `CLAUDE_CODE_SMALL_MODEL`
+- `CLAUDE_CODE_SUBAGENT_MODEL`
 
-**可用模型：**
-| 品牌 | 模型 | 能力 |
-|------|------|------|
-| 千问 | qwen3.5-plus | 文本生成、深度思考、视觉理解 |
-| 千问 | qwen3-max-2026-01-23 | 文本生成、深度思考 |
-| 千问 | qwen3-coder-next | 文本生成 |
-| 千问 | qwen3-coder-plus | 文本生成 |
-| 智谱 | glm-5 | 文本生成、深度思考 |
-| 智谱 | glm-4.7 | 文本生成、深度思考 |
-| Kimi | kimi-k2.5 | 文本生成、深度思考、视觉理解 |
-| MiniMax | minimax-m2.5 | 文本生成、深度思考 |
+这样 Claude Code 的 team subagent 会跟随当前选择的模型。
 
-**配置方式：**
-```bash
-ccc -a
-# 选择 2) Alibaba Coding Plan (百炼) - auto fetch models
-```
-
-## API Key 安全
-
-- 配置文件包含敏感信息，请妥善保管
-- 不要将配置文件提交到公开仓库
-- API Key 在 `--show-keys` 输出中会部分隐藏（显示前8位和后4位）
-- 使用环境变量 `EDITOR` 可以指定编辑器
-
-- 巻加 `.cc-config.json` 到 `.gitignore`
-
-## 查看配置
+## 查看和校验配置
 
 ```bash
-# 查看所有模型
 ccc --list
-
-# 查看 API keys（部分隐藏)
-ccc --show-keys
-
-# 查看当前模型
+ccc --show
 ccc --current
+ccc --validate
 ```
 
-## 故障排除
+说明：
+- `--show` 只会部分显示 API Key
+- `--validate` 会根据 `command` 动态检查 `ANTHROPIC_*` 或 `OPENAI_*` 字段
+- 在安装了 `jq` 的环境中，`--validate` 可以更可靠地修复无效项
+
+## 安全建议
+
+- 不要把 `~/.cc-config.json` 提交到公开仓库
+- 建议把 `.cc-config.json` 加入你的项目 `.gitignore`
+- 如果需要使用 GUI 编辑器，可以设置环境变量 `EDITOR`
+
+例如：
+
+```bash
+EDITOR=code ccc --edit
+```
+
+## 与 CLI 安装相关的行为
+
+- `install.sh` / `install.ps1` 运行前要求机器已安装 Node.js
+- 在 Node.js 已安装的前提下，安装器会尽力自动补装缺失的 `claude` / `codex`
+- 运行 `ccc` 时，如果当前目标 CLI 缺失，脚本也会按需再次尝试安装
+
+手动安装命令：
+
+```bash
+npm install -g @anthropic-ai/claude-code
+npm install -g @openai/codex
+```
+
+最低 Node.js 要求：
+
+- Claude CLI: `>= 18.0.0`
+- Codex CLI: `>= 16.0.0`
+
+## 常见问题
 
 ### 配置文件损坏
+
 ```bash
-# 备份并重新创建
 cp ~/.cc-config.json ~/.cc-config.json.backup
 ccc --add
 ```
 
 ### 权限问题
+
 ```bash
-# 确保安装目录权限
 chmod 755 ~/.cc-cli
 chmod +x ~/bin/ccc
 ```
 
-### Claude 未安装
-如果目标 CLI 未安装，ccc 仍然可以管理配置，但无法启动对应命令。
+### `--validate` 修复能力有限
 
-例如安装 Claude: https://claude.ai
+如果当前环境没有 `jq`，Bash 版本只能做基础检查；复杂损坏场景建议直接：
 
-## 灵活配置
-- 可以添加任意兼容 Anthropic API 的端点
-- 可以配置多个同一提供商的不同模型
-- 支持 custom headers（通过环境变量）
-
-## Team Subagent 模型配置
-
-当你使用 Claude Code 的 team 功能时，subagent 默认会使用硬编码的模型（如 `haiku` 或 `claude-opus-4-6`）。
-
-从 v1.3.3 开始，`ccc` 脚本会在启动时自动更新 `~/.claude/settings.json` 文件，将当前选择的模型配置写入其中，这样 team subagent 也会使用相同的模型。
-
-### 工作原理
-
-1. 当你运行 `ccc [模型索引]` 且所选 `command` 为 `claude` 时
-2. 脚本会读取该模型的 `ANTHROPIC_MODEL` 和 `ANTHROPIC_SMALL_FAST_MODEL` 配置
-3. 自动更新 `~/.claude/settings.json` 的 `env` 字段
-4. Claude Code 启动时会读取这些环境变量，subagent 也会继承
-
-### 示例
-
-运行以下命令后：
 ```bash
-ccc 1  # 选择阿里百炼 qwen3.5-plus
+ccc --edit
 ```
 
-`~/.claude/settings.json` 会被更新为：
-```json
-{
-  "env": {
-    "ANTHROPIC_MODEL": "qwen3.5-plus",
-    "ANTHROPIC_SMALL_FAST_MODEL": "qwen3.5-plus",
-    ...
-  },
-  ...
-}
-```
-
-### 注意事项
-
-- 如果你手动编辑了 `~/.claude/settings.json`，下次运行 `ccc` 时会被覆盖
-- 如果需要在不同项目中使用不同模型，可以在项目根目录创建 `.claude/settings.local.json`
-- 此功能需要 `jq` 命令支持（macOS 和 Linux 默认已安装）
+或重新创建配置。

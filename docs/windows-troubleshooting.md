@@ -1,189 +1,173 @@
-# CC-CLI 配置文件诊断和修复指南
+# Windows 故障排除
 
-## 🔍 问题诊断
+本页主要覆盖 PowerShell 环境下最常见的三类问题：
 
-你的配置文件显示只显示了标题，但没有显示模型列表。可能的原因：
-1. JSON 格式不正确（BOM、编码、格式）
-2. PowerShell 解析 JSON 失败
+1. 安装器直接退出
+2. 配置文件无法解析
+3. 运行时找不到 `claude` / `codex`
 
----
+## 1. 安装器直接退出
 
-## 🛠️ 诊断步骤
+### 提示：`Node.js is required to install ccc`
 
-### 1. 检查配置文件
-```powershell
-# 查看配置文件内容
-Get-Content $env:USERPROFILE\.cc-config.json
-
-# 检查是否包含 BOM
-$content = Get-Content $env:USERPROFILE\.cc-config.json -Raw
-if ($content[0] -eq [char]0xEF -and $content[1] -eq [char]0xBB -and $content[2] -eq [char]0xBF) {
-    Write-Host "✗ 文件包含 BOM 标记" -ForegroundColor Red
-}
-
-# 尝试解析 JSON
-try {
-    $config = Get-Content $env:USERPROFILE\.cc-config.json | ConvertFrom-Json
-    Write-Host "✓ JSON 解析成功" -ForegroundColor Green
-    Write-Host "模型数量: $($config.Count)"
-} catch {
-    Write-Host "✗ JSON 解析失败" -ForegroundColor Red
-    Write-Host $_.Exception.Message
-}
-```
-
----
-
-## 🔧 修复方案
-
-### 方式 1: 使用 PowerShell 重新创建（推荐）
+这表示你在运行：
 
 ```powershell
-# 创建正确的配置
-$config = @(
-    @{
-        name = "ZHIPU AI"
-        env = @{
-            ANTHROPIC_AUTH_TOKEN = "b9dc0380ae024c489995902fdc15c08b.jXiWqnWOD4pqPOaS"
-            ANTHROPIC_MODEL = "glm-5"
-            ANTHROPIC_SMALL_FAST_MODEL = "glm-4.7"
-            ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic"
-        }
-    }
-)
-
-# 保存为 UTF-8 无 BOM
-[System.IO.File]::WriteAllText(
-    "$env:USERPROFILE\.cc-config.json",
-    ($config | ConvertTo-Json -Depth 10),
-    [System.Text.UTF8Encoding]::new($false)
-)
-
-Write-Host "✓ 配置文件已重新创建" -ForegroundColor Green
+irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 ```
 
-### 方式 2: 手动编辑
+时，系统里还没有可用的 Node.js。
+
+处理方法：
+
+1. 安装 Node.js
+2. 重新打开 PowerShell
+3. 再次执行安装脚本
+
+安装完成后可先确认：
 
 ```powershell
-# 用记事本打开
-notepad $env:USERPROFILE\.cc-config.json
+node --version
+npm --version
 ```
 
-确保格式正确：
+### 最低版本要求
+
+- Claude CLI: Node.js `>= 18.0.0`
+- Codex CLI: Node.js `>= 16.0.0`
+
+说明：
+- 安装器要求机器上先有 Node.js
+- 在 Node.js 已安装的前提下，安装器会尽力自动补装缺失的 `claude` / `codex`
+
+## 2. 运行时提示无法自动安装目标 CLI
+
+例如：
+
+```text
+Cannot install claude CLI automatically because npm is not installed.
+```
+
+或：
+
+```text
+Node.js version is too old to install codex CLI.
+```
+
+这表示：
+
+- `ccc` 已经安装成功
+- 但当前机器还不满足所选目标 CLI 的运行依赖
+
+处理方式：
+
+```powershell
+npm install -g @anthropic-ai/claude-code
+npm install -g @openai/codex
+```
+
+如果仍然失败，优先检查：
+
+```powershell
+node --version
+npm --version
+Get-Command claude -ErrorAction SilentlyContinue
+Get-Command codex -ErrorAction SilentlyContinue
+```
+
+## 3. 配置文件无法解析
+
+配置文件路径：
+
+```text
+$env:USERPROFILE\.cc-config.json
+```
+
+### 快速检查
+
+```powershell
+Get-Content $env:USERPROFILE\.cc-config.json -Raw | ConvertFrom-Json
+```
+
+如果报错，通常是：
+
+- JSON 语法错误
+- 文件编码异常
+- 手动编辑时多了逗号或缺了引号
+
+### 推荐修复方式
+
+先备份旧文件：
+
+```powershell
+Copy-Item $env:USERPROFILE\.cc-config.json $env:USERPROFILE\.cc-config.json.backup -ErrorAction SilentlyContinue
+```
+
+然后直接用：
+
+```powershell
+ccc --edit
+```
+
+或重新创建：
+
+```powershell
+Set-Content -Path $env:USERPROFILE\.cc-config.json -Value "[]" -Encoding utf8
+ccc --add
+```
+
+### 正确的最小配置示例
+
 ```json
 [
-    {
-        "name": "ZHIPU AI",
-        "env": {
-            "ANTHROPIC_AUTH_TOKEN": "b9dc0380ae024c489995902fdc15c08b.jXiWqnWOD4pqPOaS",
-            "ANTHROPIC_MODEL": "glm-5",
-            "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.7",
-            "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic"
-        }
+  {
+    "name": "ZHIPU AI",
+    "env": {
+      "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+      "ANTHROPIC_AUTH_TOKEN": "your-api-key",
+      "ANTHROPIC_MODEL": "glm-5",
+      "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.7"
     }
+  }
 ]
 ```
 
-**注意事项：**
-- ✅ 使用双引号 `"`
-- ✅ 正确的 JSON 语法
-- ✅ 保存为 UTF-8 编码
-- ❌ 不要有多余的逗号或空格
+不要把真实 API Key 写进文档、截图或 issue。
 
----
-
-## ✅ 验证
+## 4. 如何验证配置是否有效
 
 ```powershell
-# 测试配置
 ccc --list
-
-# 应该显示：
-===================================
-  Available AI Models
-===================================
-
-  > 1) ZHIPU AI
-
------------------------------------
+ccc --show
+ccc --validate
 ```
 
----
+说明：
 
-## 🐛 常见问题
+- `--show` 只会部分显示密钥
+- `--validate` 会按当前 `command` 校验 `ANTHROPIC_*` 或 `OPENAI_*`
 
-### 问题 1: JSON 格式错误
+## 5. `ccc` 命令无法使用
 
-错误示例（你的配置）：
-```json
-[
-    {
-        "name":  "zhipu",
-        "env":  {
-```
-
-正确示例：
-```json
-[
-    {
-        "name": "ZHIPU AI",
-        "env": {
-```
-
-### 问题 2: BOM 标记
-某些编辑器会添加 BOM（字节顺序标记），导致解析失败。
-
-**解决方法:**
-```powershell
-# 移除 BOM
-$content = Get-Content $env:USERPROFILE\.cc-config.json -Raw
-if ($content[0..2] -eq @(0xEF, 0xBB, 0xBF)) {
-    $content = $content[3..($content.Length - 1)]
-    [System.IO.File]::WriteAllBytes($env:USERPROFILE\.cc-config.json, $content)
-}
-```
-
----
-
-## 📝 快速修复命令
+先检查 PowerShell profile 和 PATH 是否生效：
 
 ```powershell
-# 一键修复配置文件
-$config = @(
-    @{
-        name = "ZHIPU AI"
-        env = @{
-            ANTHROPIC_AUTH_TOKEN = "b9dc0380ae024c489995902fdc15c08b.jXiWqnWOD4pqPOaS"
-            ANTHROPIC_MODEL = "glm-5"
-            ANTHROPIC_SMALL_FAST_MODEL = "glm-4.7"
-            ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic"
-        }
-    }
-)
-
-# 保存
-[System.IO.File]::WriteAllText(
-    "$env:USERPROFILE\.cc-config.json",
-    ($config | ConvertTo-Json -Depth 10),
-    [System.Text.UTF8Encoding]::new($false)
-)
-
-# 验证
-ccc --list
+Get-Command ccc -ErrorAction SilentlyContinue
+$env:PATH -split ';'
 ```
 
----
+如果安装刚完成但当前窗口还没加载新环境，重开一个 PowerShell 窗口再试。
 
-## 🎯 如果仍然不工作
+## 6. 完全重装
 
 ```powershell
-# 完全重新安装
-Remove-Item $env:USERPROFILE\.cc-config.json -Force
+ccc --uninstall
 irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
+```
 
-# 编辑配置文件
-ccc -E
-# 粘贴你的配置
-# 保存并测试
-ccc --list
+如果只想重建配置文件：
+
+```powershell
+Remove-Item $env:USERPROFILE\.cc-config.json -Force
+ccc --add
 ```
