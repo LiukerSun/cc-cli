@@ -41,11 +41,10 @@ jobs:
       - name: Verify install and uninstall flow
         run: bash tests/install_best_effort.sh
 
+      - name: Install GoReleaser
+        run: go install github.com/goreleaser/goreleaser/v2@v2.12.7
+
       - name: Publish release assets
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
+        run: "$(go env GOPATH)/bin/goreleaser release --clean"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
