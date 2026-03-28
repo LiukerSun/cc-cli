@@ -18,7 +18,7 @@ function Assert-Contains {
         [string]$Message
     )
 
-    if ($Text -notlike "*$Needle*") {
+    if (-not $Text.Contains($Needle)) {
         throw "$Message`nOutput:`n$Text"
     }
 }
