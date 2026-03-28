@@ -1,0 +1,37 @@
+project_name: ccc
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - id: ccc
+    main: ./cmd/ccc
+    binary: ccc
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/LiukerSun/cc-cli/internal/buildinfo.Version={{ .Version }}
+
+archives:
+  - id: unix
+    ids: [ccc]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      ccc_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true

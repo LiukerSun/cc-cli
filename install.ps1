@@ -1,722 +1,220 @@
-# CC-CLI PowerShell Installation Script
-# https://github.com/LiukerSun/cc-cli
+# CC-CLI thin installer for the Go rewrite
 
 param(
+    [ValidateSet("install", "uninstall")]
     [string]$Action = "install",
-    [string]$Branch = "main"
+    [string]$Version = "",
+    [string]$InstallBinDir = ""
 )
 
-$scriptPath = $MyInvocation.MyCommand.Path
-$REPO_URL = "https://github.com/LiukerSun/cc-cli"
+$ErrorActionPreference = "Stop"
 
-if ($scriptPath) {
-    $SCRIPT_DIR = Split-Path -Parent $scriptPath
-    $VERSION_FILE = Join-Path $SCRIPT_DIR "VERSION"
-    if (Test-Path $VERSION_FILE) {
-        $VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+$RepoOwner = "LiukerSun"
+$RepoName = "cc-cli"
+$ProjectName = "ccc"
+$RepoUrl = "https://github.com/$RepoOwner/$RepoName"
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$VersionFile = Join-Path $ScriptDir "VERSION"
+$LocalVersion = "dev"
+if (Test-Path $VersionFile) {
+    $LocalVersion = (Get-Content $VersionFile -Raw).Trim()
+}
+
+if (-not $Version) {
+    if ($env:CCC_VERSION) {
+        $Version = $env:CCC_VERSION
     } else {
-        $VERSION = "unknown"
-    }
-} else {
-    $SCRIPT_DIR = $null
-    try {
-        $versionUrl = "$REPO_URL/raw/$Branch/VERSION"
-        $VERSION = (New-Object System.Net.WebClient).DownloadString($versionUrl).Trim()
-    } catch {
-        $VERSION = "unknown"
+        $Version = "latest"
     }
 }
 
-# Installation paths
-$INSTALL_DIR = "$env:USERPROFILE\.ccc"
-$LEGACY_INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
-$CONFIG_FILE = "$INSTALL_DIR\config.json"
-$LEGACY_CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
-$SCRIPT_FILE = "$INSTALL_DIR\bin\ccc.ps1"
-$LAUNCHER_FILE = "$env:USERPROFILE\bin\ccc.ps1"
-$ENV_FILE = "$INSTALL_DIR\tmp\cc-model-env.ps1"
-$CLI_PACKAGES = @{
-    claude = "@anthropic-ai/claude-code"
-    codex = "@openai/codex"
-}
-$CLI_MIN_NODE_VERSIONS = @{
-    claude = "18.0.0"
-    codex = "16.0.0"
-}
-
-# Colors
-function Write-ColorOutput($ForegroundColor) {
-    $fc = $host.UI.RawUI.ForegroundColor
-    $host.UI.RawUI.ForegroundColor = $ForegroundColor
-    if ($args) {
-        Write-Output $args
+if (-not $InstallBinDir) {
+    if ($env:CCC_INSTALL_BIN_DIR) {
+        $InstallBinDir = $env:CCC_INSTALL_BIN_DIR
+    } else {
+        $InstallBinDir = Join-Path $env:LOCALAPPDATA "Programs\ccc\bin"
     }
-    $host.UI.RawUI.ForegroundColor = $fc
 }
 
-function Write-Success { Write-ColorOutput Green $args }
-function Write-Info { Write-ColorOutput Cyan $args }
-function Write-Warning { Write-ColorOutput Yellow $args }
-function Write-Error { Write-ColorOutput Red $args }
+$InstallPath = Join-Path $InstallBinDir "ccc.exe"
 
-# Helper function to save UTF-8 without BOM
-function Save-FileNoBOM {
+function Write-Info {
+    param([string]$Message)
+    Write-Host $Message
+}
+
+function Fail {
+    param([string]$Message)
+    throw $Message
+}
+
+function Get-TagName {
+    param([string]$RawVersion)
+
+    if ($RawVersion -eq "latest") {
+        return "latest"
+    }
+    if ($RawVersion.StartsWith("v")) {
+        return $RawVersion
+    }
+    return "v$RawVersion"
+}
+
+function Get-OsArch {
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+    switch ($arch) {
+        "X64" { $goArch = "amd64" }
+        "Arm64" { $goArch = "arm64" }
+        default { Fail "Unsupported architecture: $arch" }
+    }
+
+    return @{
+        Os = "windows"
+        Arch = $goArch
+    }
+}
+
+function Expand-ZipFile {
     param(
-        [string]$Path,
-        [string]$Content
-    )
-    
-    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
-}
-
-function Ensure-CccDirectories {
-    foreach ($path in @($INSTALL_DIR, (Split-Path $SCRIPT_FILE -Parent), (Split-Path $LAUNCHER_FILE -Parent), (Split-Path $ENV_FILE -Parent))) {
-        New-Item -ItemType Directory -Force -Path $path | Out-Null
-    }
-}
-
-function Write-LauncherScript {
-    $launcherContent = @"
-# CC-CLI Launcher
-& "$SCRIPT_FILE" @args
-"@
-
-    Save-FileNoBOM -Path $LAUNCHER_FILE -Content $launcherContent
-}
-
-function Migrate-LegacyPaths {
-    Ensure-CccDirectories
-
-    if (-not (Test-Path $CONFIG_FILE) -and (Test-Path $LEGACY_CONFIG_FILE)) {
-        Move-Item -Path $LEGACY_CONFIG_FILE -Destination $CONFIG_FILE
-        Write-Success "[OK] Migrated legacy config to $CONFIG_FILE"
-    }
-}
-
-function Get-CliPackageName {
-    param(
-        [string]$CommandName
+        [string]$ZipPath,
+        [string]$Destination
     )
 
-    return $CLI_PACKAGES[$CommandName]
-}
-
-function Get-CliMinimumNodeVersion {
-    param(
-        [string]$CommandName
-    )
-
-    return $CLI_MIN_NODE_VERSIONS[$CommandName]
-}
-
-function ConvertTo-SemanticVersionString {
-    param(
-        [string]$VersionString
-    )
-
-    $clean = ([string]$VersionString).Trim()
-    $clean = $clean.TrimStart('v')
-    $clean = $clean -replace '^>=\s*', ''
-    $clean = $clean -replace '[-+].*$', ''
-
-    $parts = @($clean.Split('.', [System.StringSplitOptions]::RemoveEmptyEntries))
-    while ($parts.Count -lt 3) {
-        $parts += "0"
+    if (Test-Path $Destination) {
+        Remove-Item -Recurse -Force $Destination
     }
-
-    return "$($parts[0]).$($parts[1]).$($parts[2])"
+    Expand-Archive -Path $ZipPath -DestinationPath $Destination -Force
 }
 
-function Test-VersionLessThan {
+function Verify-ChecksumIfAvailable {
     param(
-        [string]$Left,
-        [string]$Right
+        [string]$AssetPath,
+        [string]$ChecksumsPath
     )
 
-    return ([Version](ConvertTo-SemanticVersionString -VersionString $Left)) -lt ([Version](ConvertTo-SemanticVersionString -VersionString $Right))
-}
-
-function Add-NpmGlobalBinToPath {
-    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    if (-not (Test-Path $ChecksumsPath)) {
         return
     }
 
-    $npmPrefix = (& npm config get prefix 2>$null | Out-String).Trim()
-    if (-not $npmPrefix -or $npmPrefix -eq "undefined") {
+    $assetName = Split-Path -Leaf $AssetPath
+    $line = Get-Content $ChecksumsPath | Where-Object { $_ -match " $([regex]::Escape($assetName))$" } | Select-Object -First 1
+    if (-not $line) {
         return
     }
 
-    $candidate = $npmPrefix
-    if ($env:OS -ne "Windows_NT") {
-        $unixBin = Join-Path $npmPrefix "bin"
-        if (Test-Path $unixBin) {
-            $candidate = $unixBin
-        }
-    }
-
-    $pathEntries = @($env:PATH -split [System.IO.Path]::PathSeparator)
-    if ($pathEntries -notcontains $candidate) {
-        $env:PATH = "$candidate$([System.IO.Path]::PathSeparator)$env:PATH"
+    $expected = ($line -split '\s+')[0]
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $AssetPath).Hash.ToLowerInvariant()
+    if ($expected.ToLowerInvariant() -ne $actual) {
+        Fail "Checksum verification failed for $assetName"
     }
 }
 
-function Require-NodeForInstall {
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Error "[X] Node.js is required to install ccc"
-        Write-Host "  Current version: not installed"
-        Write-Host "  Please install Node.js first, then rerun the installer."
-        return $false
+function Install-FromLocalCheckout {
+    if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+        Fail "go is required to build from a local checkout"
     }
 
-    Write-Success "[OK] Node.js $((& node --version 2>$null | Out-String).Trim()) found"
-    return $true
-}
-
-function Ensure-NodeAndNpmForCommand {
-    param(
-        [string]$CommandName
-    )
-
-    $requiredVersion = Get-CliMinimumNodeVersion -CommandName $CommandName
-    if (-not $requiredVersion) {
-        Write-Warning "[!] Unsupported CLI command: $CommandName"
-        return $false
-    }
-
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Warning "[!] Skipping automatic install for ${CommandName}: Node.js is not installed"
-        Write-Host "  Current version: not installed"
-        Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  ccc is installed anyway. Install or upgrade Node.js before using '${CommandName}'."
-        return $false
-    }
-
-    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-        $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
-        Write-Warning "[!] Skipping automatic install for ${CommandName}: npm is not installed"
-        Write-Host "  Current Node.js version: $currentNodeVersion"
-        Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  ccc is installed anyway. Install npm before using '${CommandName}'."
-        return $false
-    }
-
-    $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
-    if (Test-VersionLessThan -Left $currentNodeVersion -Right $requiredVersion) {
-        Write-Warning "[!] Skipping automatic install for ${CommandName}: Node.js version is too old"
-        Write-Host "  Current version: $currentNodeVersion"
-        Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  ccc is installed anyway. Upgrade Node.js before using '${CommandName}'."
-        return $false
-    }
-
-    Write-Success "[OK] Node.js $currentNodeVersion found"
-    Write-Success "[OK] npm $((& npm --version 2>$null | Out-String).Trim()) found"
-    Add-NpmGlobalBinToPath
-    return $true
-}
-
-function Install-MissingCliCommand {
-    param(
-        [string]$CommandName
-    )
-
-    $packageName = Get-CliPackageName -CommandName $CommandName
-    if (-not $packageName) {
-        Write-Error "[X] Unsupported CLI command: $CommandName"
-        return $false
-    }
-
-    Write-Warning "Installing missing $CommandName CLI via npm ($packageName)..."
-    & npm install -g $packageName
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "[X] Failed to install $CommandName CLI automatically"
-        Write-Host "  Try manually: npm install -g $packageName"
-        return $false
-    }
-
-    Add-NpmGlobalBinToPath
-    if (-not (Get-Command $CommandName -ErrorAction SilentlyContinue)) {
-        Write-Error "[X] $CommandName CLI is still not available after installation"
-        Write-Host "  Try manually: npm install -g $packageName"
-        return $false
-    }
-
-    Write-Success "[OK] $CommandName CLI installed"
-    return $true
-}
-
-function Check-AndPrepareCliCommands {
-    Add-NpmGlobalBinToPath
-
-    foreach ($commandName in @("claude", "codex")) {
-        if (Get-Command $commandName -ErrorAction SilentlyContinue) {
-            Write-Success "[OK] $commandName CLI found"
-        } else {
-            Write-Warning "[!] $commandName CLI not found"
-            if (Ensure-NodeAndNpmForCommand -CommandName $commandName) {
-                if (-not (Install-MissingCliCommand -CommandName $commandName)) {
-                    Write-Warning "[!] Continuing installation without $commandName CLI"
-                }
-            }
-        }
-    }
-
-    Write-Host ""
-}
-
-# Banner
-Write-Info "==================================="
-Write-Info "  CC-CLI Installer v$VERSION (PowerShell)"
-Write-Info "==================================="
-Write-Host ""
-
-# Check requirements
-function Check-Requirements {
-    Write-Warning "Checking system requirements..."
-    
-    # Check PowerShell version
-    if ($PSVersionTable.PSVersion.Major -lt 5) {
-        Write-Error "[X] PowerShell 5.0 or later is required"
-        exit 1
-    }
-    Write-Success "[OK] PowerShell $($PSVersionTable.PSVersion) found"
-
-    if (-not (Require-NodeForInstall)) {
-        exit 1
-    }
-    
-    Check-AndPrepareCliCommands
-}
-
-# Create directories
-function Create-Directories {
-    Write-Warning "Creating directories..."
-    
-    Ensure-CccDirectories
-    
-    Write-Success "[OK] Created $INSTALL_DIR"
-    Write-Success "[OK] Created $(Split-Path $SCRIPT_FILE -Parent)"
-    Write-Success "[OK] Created $(Split-Path $LAUNCHER_FILE -Parent)"
-    Write-Host ""
-}
-
-# Download main script
-function Install-Script {
-    Write-Warning "Installing ccc command (branch: $Branch)..."
-    
-    $scriptUrl = "$REPO_URL/raw/$Branch/bin/ccc.ps1"
-    $installScriptDest = "$INSTALL_DIR\install.ps1"
-    
-    if ($SCRIPT_DIR) {
-        $localScript = Join-Path $SCRIPT_DIR "bin\ccc.ps1"
-        
-        if (Test-Path $localScript) {
-            Copy-Item -Path $localScript -Destination $SCRIPT_FILE -Force
-            $localVersion = Join-Path $SCRIPT_DIR "VERSION"
-            if (Test-Path $localVersion) {
-                Copy-Item -Path $localVersion -Destination "$INSTALL_DIR\VERSION" -Force
-            }
-            # Copy install.ps1 for uninstall support
-            $localInstallScript = Join-Path $SCRIPT_DIR "install.ps1"
-            if (Test-Path $localInstallScript) {
-                Copy-Item -Path $localInstallScript -Destination $installScriptDest -Force
-                Write-Success "[OK] Installed uninstall script to $installScriptDest"
-            }
-            Write-LauncherScript
-            Write-Success "[OK] Installed launcher to $LAUNCHER_FILE"
-            Write-Success "[OK] Installed ccc.ps1 from local source"
-
-            # Migrate from old 'cc' command name
-            $oldScript = Join-Path (Split-Path $LAUNCHER_FILE -Parent) "cc.ps1"
-            if (Test-Path $oldScript) {
-                Remove-Item $oldScript -Force
-                Write-Success "[OK] Removed old 'cc.ps1' (now use 'ccc')"
-            }
-
-            Write-Host ""
-            return
-        }
-    }
-    
-    Write-Host "Downloading from: $scriptUrl"
-    
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ccc-install-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
     try {
-        $webClient = New-Object System.Net.WebClient
-        $webClient.Encoding = [System.Text.Encoding]::UTF8
-        $content = $webClient.DownloadString($scriptUrl)
-        
-        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-        [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
-        Write-LauncherScript
-        
-        Write-Success "[OK] Downloaded ccc.ps1 to $SCRIPT_FILE"
-        Write-Success "[OK] Installed launcher to $LAUNCHER_FILE"
-        
-        # Download install.ps1 for uninstall support
-        $installScriptUrl = "$REPO_URL/raw/$Branch/install.ps1"
+        Write-Info "Building $ProjectName from local checkout..."
+        Push-Location $ScriptDir
         try {
-            $installScriptContent = $webClient.DownloadString($installScriptUrl)
-            [System.IO.File]::WriteAllText($installScriptDest, $installScriptContent, $utf8NoBom)
-            Write-Success "[OK] Downloaded uninstall script to $installScriptDest"
-        } catch {
-            Write-Warning "[!] Could not download install.ps1 file"
+            & go build -trimpath -ldflags "-X github.com/LiukerSun/cc-cli/internal/buildinfo.Version=$LocalVersion" -o (Join-Path $tmpDir "ccc.exe") ./cmd/ccc
+        } finally {
+            Pop-Location
         }
-        
-        $versionDest = "$INSTALL_DIR\VERSION"
-        $versionUrl = "$REPO_URL/raw/$Branch/VERSION"
+
+        New-Item -ItemType Directory -Force -Path $InstallBinDir | Out-Null
+        Copy-Item -Force (Join-Path $tmpDir "ccc.exe") $InstallPath
+    } finally {
+        if (Test-Path $tmpDir) {
+            Remove-Item -Recurse -Force $tmpDir
+        }
+    }
+}
+
+function Install-FromRelease {
+    $osArch = Get-OsArch
+    $tag = Get-TagName -RawVersion $Version
+    $assetName = "ccc_{0}_{1}.zip" -f $osArch.Os, $osArch.Arch
+
+    if ($tag -eq "latest") {
+        $baseUrl = "$RepoUrl/releases/latest/download"
+    } else {
+        $baseUrl = "$RepoUrl/releases/download/$tag"
+    }
+
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ccc-install-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    try {
+        $archivePath = Join-Path $tmpDir $assetName
+        $checksumsPath = Join-Path $tmpDir "checksums.txt"
+
+        Write-Info "Downloading $assetName..."
+        Invoke-WebRequest -Uri "$baseUrl/$assetName" -OutFile $archivePath
         try {
-            $versionContent = $webClient.DownloadString($versionUrl).Trim()
-            [System.IO.File]::WriteAllText($versionDest, $versionContent, $utf8NoBom)
-            Write-Success "[OK] Downloaded VERSION to $versionDest"
+            Invoke-WebRequest -Uri "$baseUrl/checksums.txt" -OutFile $checksumsPath
         } catch {
-            Write-Warning "[!] Could not download VERSION file"
+        }
+        Verify-ChecksumIfAvailable -AssetPath $archivePath -ChecksumsPath $checksumsPath
+
+        $extractDir = Join-Path $tmpDir "extract"
+        Expand-ZipFile -ZipPath $archivePath -Destination $extractDir
+        $binaryPath = Join-Path $extractDir "ccc.exe"
+        if (-not (Test-Path $binaryPath)) {
+            Fail "Release archive did not contain ccc.exe"
         }
 
-        # Migrate from old 'cc' command name
-        $oldScript = Join-Path (Split-Path $LAUNCHER_FILE -Parent) "cc.ps1"
-        if (Test-Path $oldScript) {
-            Remove-Item $oldScript -Force
-            Write-Success "[OK] Removed old 'cc.ps1' (now use 'ccc')"
+        New-Item -ItemType Directory -Force -Path $InstallBinDir | Out-Null
+        Copy-Item -Force $binaryPath $InstallPath
+    } finally {
+        if (Test-Path $tmpDir) {
+            Remove-Item -Recurse -Force $tmpDir
         }
-    } catch {
-        Write-Error "[X] Failed to download script: $_"
-        Write-Host "Please download manually from: $scriptUrl"
-        exit 1
     }
-    
-    Write-Host ""
 }
 
-# Create default config
-function Create-Config {
-    if (-not (Test-Path $CONFIG_FILE)) {
-        Write-Warning "Creating empty configuration..."
-        
-        Save-FileNoBOM -Path $CONFIG_FILE -Content "[]"
-        Write-Success "[OK] Created empty config file: $CONFIG_FILE"
-        Write-Warning "  Run 'ccc -a' to add your first model"
-    } else {
-        Write-Success "[OK] Config file already exists: $CONFIG_FILE"
-    }
-    Write-Host ""
-}
-
-# Add to PATH
-function Add-ToPath {
-    Write-Warning "Configuring PATH..."
-    
-    $binDir = Split-Path $LAUNCHER_FILE -Parent
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    
-    if ($currentPath -notlike "*$binDir*") {
-        [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$binDir", "User")
-        Write-Success "[OK] Added $binDir to PATH"
-        Write-Warning "  Please restart your terminal or run: `$env:PATH += `";$binDir`""
-    } else {
-        Write-Success "[OK] Already in PATH"
-    }
-    Write-Host ""
-}
-
-# Create wrapper function
-function Create-Wrapper {
-    Write-Warning "Creating PowerShell wrapper..."
-    
-    $wrapperContent = @"
-# CC-CLI PowerShell Wrapper
-function ccc {
-    & "$SCRIPT_FILE" @args
-}
-"@
-    
-    $profileDir = Split-Path $PROFILE -Parent
-    if (-not (Test-Path $profileDir)) {
-        New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
-    }
-    
-    # Remove old wrapper if exists
-    if (Test-Path $PROFILE) {
-        $profileContent = Get-Content $PROFILE -Raw
-        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function ccc \{.*?\}'
-        $profileContent = $profileContent -replace $pattern, ''
-        $profileContent = $profileContent.TrimEnd()
-        
-        # Save cleaned profile
-        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-        [System.IO.File]::WriteAllText($PROFILE, $profileContent, $utf8NoBom)
-    }
-    
-    # Add new wrapper
-    Add-Content -Path $PROFILE -Value "`n`n$wrapperContent"
-    Write-Success "[OK] Added ccc function to PowerShell profile"
-    Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
-    Write-Host ""
-}
-
-# Print success message
-function Print-Success {
-    Write-Success "==================================="
-    Write-Success "  Installation Complete!"
-    Write-Success "==================================="
-    Write-Host ""
-    
-    Write-Info "Next steps:"
-    Write-Host ""
-    Write-Host "  1. " -NoNewline
-    Write-Warning "Add your API keys:"
-    Write-Host "     " -NoNewline
-    Write-Info "ccc -E"
-    Write-Host ""
-    Write-Host "  2. " -NoNewline
-    Write-Warning "Restart PowerShell or run:"
-    Write-Host "     " -NoNewline
-    Write-Info ". `$PROFILE"
-    Write-Host ""
-    Write-Host "  3. " -NoNewline
-    Write-Warning "Start using ccc:"
-    Write-Host "     " -NoNewline
-    Write-Info "ccc              # Interactive selection"
-    Write-Host "     " -NoNewline
-    Write-Info "ccc --list       # List all models"
-    Write-Host "     " -NoNewline
-    Write-Info "ccc --help       # Show help"
-    Write-Host ""
-    Write-Info "Documentation:"
-    Write-Host "  $REPO_URL"
-    Write-Host ""
-    Write-Info "Configuration file:"
-    Write-Host "  $CONFIG_FILE"
-    Write-Host ""
-}
-
-# Uninstall function
-function Uninstall {
-    param(
-        [switch]$KeepConfig,
-        [switch]$KeepSettings
+function Uninstall-Ccc {
+    $paths = @(
+        $InstallPath,
+        (Join-Path $env:USERPROFILE "bin\ccc.exe"),
+        (Join-Path $env:USERPROFILE ".ccc\bin\ccc.exe"),
+        (Join-Path $env:USERPROFILE "bin\ccc.ps1")
     )
-    
-    Write-Info "==================================="
-    Write-Info "  CC-CLI Uninstaller"
-    Write-Info "==================================="
-    Write-Host ""
-    
-    $confirm = Read-Host "Are you sure you want to uninstall cc-cli? (y/N)"
-    if ($confirm -notin @("y", "Y", "yes", "YES")) {
-        Write-Host "Uninstall cancelled."
-        exit 0
-    }
-    
-    Write-Host ""
-    Write-Warning "Removing files..."
-    
-    # Remove main script
-    if (Test-Path $SCRIPT_FILE) {
-        Remove-Item $SCRIPT_FILE -Force
-        Write-Success "[OK] Removed $SCRIPT_FILE"
-    } else {
-        Write-Warning "[!] Script file not found: $SCRIPT_FILE"
-    }
 
-    if (Test-Path $LAUNCHER_FILE) {
-        Remove-Item $LAUNCHER_FILE -Force
-        Write-Success "[OK] Removed $LAUNCHER_FILE"
-    } else {
-        Write-Warning "[!] Launcher file not found: $LAUNCHER_FILE"
-    }
-    
-    # Remove installation directory
-    if (Test-Path $INSTALL_DIR) {
-        Remove-Item $INSTALL_DIR -Recurse -Force
-        Write-Success "[OK] Removed $INSTALL_DIR"
-    } else {
-        Write-Warning "[!] Installation directory not found: $INSTALL_DIR"
-    }
-
-    if (Test-Path $LEGACY_INSTALL_DIR) {
-        Remove-Item $LEGACY_INSTALL_DIR -Recurse -Force
-        Write-Success "[OK] Removed legacy directory $LEGACY_INSTALL_DIR"
-    }
-    
-    # Remove temp env file
-    if (Test-Path $ENV_FILE) {
-        Remove-Item $ENV_FILE -Force
-        Write-Success "[OK] Removed $ENV_FILE"
-    }
-
-    $legacyEnvFile = "$env:TEMP\cc-model-env.ps1"
-    if (Test-Path $legacyEnvFile) {
-        Remove-Item $legacyEnvFile -Force
-        Write-Success "[OK] Removed $legacyEnvFile"
-    }
-    
-    # Remove config file (optional)
-    if (-not $KeepConfig) {
-        $configConfirm = Read-Host "`nDelete config file? (y/N)"
-        if ($configConfirm -in @("y", "Y", "yes", "YES")) {
-            $removedConfig = $false
-            if (Test-Path $CONFIG_FILE) {
-                Remove-Item $CONFIG_FILE -Force
-                Write-Success "[OK] Removed $CONFIG_FILE"
-                $removedConfig = $true
-            }
-            if (Test-Path $LEGACY_CONFIG_FILE) {
-                Remove-Item $LEGACY_CONFIG_FILE -Force
-                Write-Success "[OK] Removed legacy config $LEGACY_CONFIG_FILE"
-                $removedConfig = $true
-            }
-            if (-not $removedConfig) {
-                Write-Warning "[!] Config file not found: $CONFIG_FILE"
-            }
-        } else {
-            Write-Warning "[OK] Config file preserved: $CONFIG_FILE"
+    $removed = $false
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            Remove-Item -Force $path
+            Write-Info "Removed $path"
+            $removed = $true
         }
     }
-    
-    # Remove Claude settings (optional)
-    $CLAUDE_SETTINGS_FILE = "$env:USERPROFILE\.claude\settings.json"
-    if (-not $KeepSettings) {
-        if (Test-Path $CLAUDE_SETTINGS_FILE) {
-            $settingsConfirm = Read-Host "`nRemove cc-cli entries from Claude settings? (y/N)"
-            if ($settingsConfirm -in @("y", "Y", "yes", "YES")) {
-                try {
-                    $settings = Get-Content $CLAUDE_SETTINGS_FILE -Raw | ConvertFrom-Json
-                    
-                    # Remove cc-cli added env variables
-                    if ($settings.env) {
-                        $settings.env.PSObject.Properties.Remove('ANTHROPIC_MODEL')
-                        $settings.env.PSObject.Properties.Remove('ANTHROPIC_SMALL_FAST_MODEL')
-                        $settings.env.PSObject.Properties.Remove('CLAUDE_CODE_MODEL')
-                        $settings.env.PSObject.Properties.Remove('CLAUDE_CODE_SMALL_MODEL')
-                        $settings.env.PSObject.Properties.Remove('CLAUDE_CODE_SUBAGENT_MODEL')
-                        
-                        # Remove env section if empty
-                        if ($settings.env.PSObject.Properties.Count -eq 0) {
-                            $settings.PSObject.Properties.Remove('env')
-                        }
-                    }
-                    
-                    # Remove model field
-                    if ($settings.model) {
-                        $settings.PSObject.Properties.Remove('model')
-                    }
-                    
-                    # Remove Agent(Explore) from deny list
-                    if ($settings.permissions -and $settings.permissions.deny) {
-                        $denyList = @($settings.permissions.deny) | Where-Object { $_ -ne "Agent(Explore)" }
-                        if ($denyList.Count -eq 0) {
-                            $settings.permissions.PSObject.Properties.Remove('deny')
-                        } else {
-                            $settings.permissions.deny = $denyList
-                        }
-                    }
-                    
-                    # Save cleaned settings
-                    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-                    $json = $settings | ConvertTo-Json -Depth 10
-                    [System.IO.File]::WriteAllText($CLAUDE_SETTINGS_FILE, $json, $utf8NoBom)
-                    
-                    Write-Success "[OK] Cleaned $CLAUDE_SETTINGS_FILE"
-                } catch {
-                    Write-Warning "[!] Failed to clean settings file: $_"
-                }
-            } else {
-                Write-Warning "[OK] Claude settings preserved: $CLAUDE_SETTINGS_FILE"
-            }
-        }
+
+    if (-not $removed) {
+        Write-Info "$ProjectName is not installed in the known locations."
     }
-    
-    # Remove from PATH
-    Write-Host ""
-    Write-Warning "Removing from PATH..."
-    $binDir = Split-Path $SCRIPT_FILE -Parent
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    
-    if ($currentPath -like "*$binDir*") {
-        $newPath = ($currentPath -split ';' | Where-Object { $_ -ne $binDir }) -join ';'
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-        Write-Success "[OK] Removed $binDir from PATH"
-        Write-Warning "  Please restart your terminal or run: `$env:PATH = `$env:PATH"
-    } else {
-        Write-Warning "[!] $binDir not found in PATH"
-    }
-    
-    # Remove wrapper from profile
-    Write-Host ""
-    Write-Warning "Cleaning PowerShell profile..."
-    if (Test-Path $PROFILE) {
-        $profileContent = Get-Content $PROFILE -Raw
-        $pattern = '(?s)# CC-CLI PowerShell Wrapper.*?function ccc \{.*?\}'
-        $newContent = $profileContent -replace $pattern, ''
-        $newContent = $newContent.TrimEnd()
-        
-        if ($newContent -ne $profileContent) {
-            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-            [System.IO.File]::WriteAllText($PROFILE, $newContent, $utf8NoBom)
-            Write-Success "[OK] Removed ccc function from $PROFILE"
-            Write-Warning "  Please restart PowerShell or run: . `$PROFILE"
-        } else {
-            Write-Warning "[!] No ccc function found in profile"
-        }
-    } else {
-        Write-Warning "[!] PowerShell profile not found"
-    }
-    
-    Write-Host ""
-    Write-Success "==================================="
-    Write-Success "  Uninstall Complete!"
-    Write-Success "==================================="
-    Write-Host ""
-    
+
+    Write-Info "Config and data were left untouched."
+}
+
+if ($Action -eq "uninstall") {
+    Uninstall-Ccc
     exit 0
 }
 
-# Main
-switch ($Action.ToLower()) {
-    "uninstall" {
-        [switch]$KeepConfig = $false
-        [switch]$KeepSettings = $false
-        
-        for ($i = 0; $i -lt $args.Count; $i++) {
-            switch ($args[$i]) {
-                "--keep-config" { $KeepConfig = $true }
-                "--keep-settings" { $KeepSettings = $true }
-            }
-        }
-        
-        Uninstall -KeepConfig:$KeepConfig -KeepSettings:$KeepSettings
-    }
-    "help" {
-        Write-Host "Usage: .\install.ps1 [-Branch <name>] [ACTION]"
-        Write-Host ""
-        Write-Host "Actions:"
-        Write-Host "  install     Install cc-cli (default)"
-        Write-Host "  uninstall   Remove cc-cli"
-        Write-Host "  help        Show this help message"
-        Write-Host ""
-        Write-Host "Options:"
-        Write-Host "  -Branch     Specify branch to install (default: main)"
-        Write-Host ""
-        Write-Host "Uninstall Options:"
-        Write-Host "  --keep-config      Preserve config file"
-        Write-Host "  --keep-settings    Preserve Claude settings"
-        Write-Host ""
-        Write-Host "Examples:"
-        Write-Host "  .\install.ps1"
-        Write-Host "  .\install.ps1 -Branch feature/auto-fetch-zhipu-models"
-        Write-Host "  .\install.ps1 -Action uninstall"
-        Write-Host "  .\install.ps1 -Action uninstall --keep-config"
-        exit 0
-    }
-    default {
-        Check-Requirements
-        Create-Directories
-        Migrate-LegacyPaths
-        Install-Script
-        Create-Config
-        Add-ToPath
-        Create-Wrapper
-        Print-Success
-    }
+$shouldUseLocalBuild = (Test-Path (Join-Path $ScriptDir "go.mod")) -and (Test-Path (Join-Path $ScriptDir "cmd\ccc")) -and (($Version -eq "latest") -or ($Version -eq $LocalVersion) -or ($Version -eq "v$LocalVersion"))
+if ($shouldUseLocalBuild) {
+    Install-FromLocalCheckout
+} else {
+    Install-FromRelease
 }
+
+Write-Info ""
+Write-Info "$ProjectName installed to $InstallPath"
+if (-not (($env:PATH -split ';') -contains $InstallBinDir)) {
+    Write-Info "Warning: $InstallBinDir is not in PATH."
+}
+Write-Info "Run 'ccc version' to verify the installation."

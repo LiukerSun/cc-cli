@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate VERSION format
+        run: bash tests/check_version.sh
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Build CLI
+        run: go build ./cmd/ccc
+
+      - name: Run CLI smoke test
+        run: bash tests/test.sh
+
+      - name: Verify installer does not require Node.js
+        run: bash tests/install_requires_node.sh
+
+      - name: Verify install and uninstall flow
+        run: bash tests/install_best_effort.sh
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate VERSION format
+        shell: pwsh
+        run: bash tests/check_version.sh
+
+      - name: Run Go tests
+        shell: pwsh
+        run: go test ./...
+
+      - name: Build CLI
+        shell: pwsh
+        run: go build ./cmd/ccc
+
+      - name: Verify PowerShell installer
+        shell: pwsh
+        run: ./tests/install_windows.ps1

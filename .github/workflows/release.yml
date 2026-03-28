@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate VERSION matches tag
+        run: bash tests/check_version.sh "${{ github.ref_name }}"
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Run CLI smoke test
+        run: bash tests/test.sh
+
+      - name: Verify installer does not require Node.js
+        run: bash tests/install_requires_node.sh
+
+      - name: Verify install and uninstall flow
+        run: bash tests/install_best_effort.sh
+
+      - name: Publish release assets
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,173 +1,230 @@
 # Windows 故障排除
 
-本页主要覆盖 PowerShell 环境下最常见的三类问题：
+本页覆盖当前 Go 版 `ccc` 在 Windows / PowerShell 环境里最常见的问题：
 
-1. 安装器直接退出
-2. 配置文件无法解析
-3. 运行时找不到 `claude` / `codex`
+1. 安装器无法完成安装
+2. 运行时无法补装 `claude` / `codex`
+3. 配置文件解析或迁移失败
+4. `ccc` 或当前 profile 命令无法使用
 
-## 1. 安装器直接退出
+## 1. 安装器无法完成安装
 
-### 提示：`Node.js is required to install ccc`
+当前 `install.ps1` 只负责安装 `ccc.exe`。它不再要求机器先安装 Node.js。
 
-这表示你在运行：
+标准安装方式：
 
 ```powershell
 irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 ```
 
-时，系统里还没有可用的 Node.js。
-
-处理方法：
-
-1. 安装 Node.js
-2. 重新打开 PowerShell
-3. 再次执行安装脚本
-
-安装完成后可先确认：
+安装完成后先确认：
 
 ```powershell
-node --version
-npm --version
+ccc version
+ccc help
 ```
 
-### 最低版本要求
+### 常见原因
 
-- Claude CLI: Node.js `>= 18.0.0`
-- Codex CLI: Node.js `>= 16.0.0`
+- PowerShell 执行策略或会话环境异常
+- 网络无法访问 GitHub Releases
+- 架构或系统环境不受支持
+- `ccc.exe` 已安装，但安装目录还没进入当前窗口的 `PATH`
 
-说明：
-- 安装器要求机器上先有 Node.js
-- 在 Node.js 已安装的前提下，安装器会尽力自动补装缺失的 `claude` / `codex`
+### 快速检查
 
-## 2. 运行时提示无法自动安装目标 CLI
+```powershell
+Get-Command ccc -ErrorAction SilentlyContinue
+$env:PATH -split ';'
+Test-Path "$env:LOCALAPPDATA\Programs\ccc\bin\ccc.exe"
+```
+
+当前默认安装目录：
+
+```text
+%LOCALAPPDATA%\Programs\ccc\bin\ccc.exe
+```
+
+如果文件已经存在但命令不可用，先开一个新的 PowerShell 窗口再试。
+
+## 2. 运行时无法自动安装目标 CLI
 
 例如：
 
 ```text
-Cannot install claude CLI automatically because npm is not installed.
+dependency check failed: cannot install claude CLI automatically because npm is not installed
 ```
 
 或：
 
 ```text
-Node.js version is too old to install codex CLI.
+dependency check failed: node version 16.0.0 is too old to install claude CLI
 ```
 
 这表示：
 
-- `ccc` 已经安装成功
-- 但当前机器还不满足所选目标 CLI 的运行依赖
+- `ccc` 本身已经安装成功
+- 但运行当前 profile 需要的 `claude` 或 `codex` 还不存在
+- `ccc run` 尝试自动补装时，发现 Node.js / npm 环境不满足要求
 
-处理方式：
+### 版本要求
 
-```powershell
-npm install -g @anthropic-ai/claude-code
-npm install -g @openai/codex
-```
+- Claude CLI: Node.js `>= 18.0.0`
+- Codex CLI: Node.js `>= 16.0.0`
 
-如果仍然失败，优先检查：
+### 快速检查
 
 ```powershell
 node --version
 npm --version
 Get-Command claude -ErrorAction SilentlyContinue
 Get-Command codex -ErrorAction SilentlyContinue
+ccc doctor
 ```
 
-## 3. 配置文件无法解析
+### 手动安装
 
-配置文件路径：
+```powershell
+npm install -g @anthropic-ai/claude-code
+npm install -g @openai/codex
+```
+
+如果你不想让 `ccc` 写入外部工具配置，可以在创建 profile 时加 `--no-sync`。
+
+## 3. 配置文件解析或迁移失败
+
+当前 Windows 默认配置路径：
 
 ```text
-$env:USERPROFILE\.ccc\config.json
+%APPDATA%\ccc\config.json
 ```
 
-### 快速检查
+旧版本配置如果存在，`ccc` 仍会尝试读取：
+
+```text
+%USERPROFILE%\.ccc\config.json
+%USERPROFILE%\.cc-config.json
+```
+
+### 快速检查当前读取来源
 
 ```powershell
-Get-Content $env:USERPROFILE\.ccc\config.json -Raw | ConvertFrom-Json
+ccc config path
+ccc config show
 ```
 
-如果报错，通常是：
-
-- JSON 语法错误
-- 文件编码异常
-- 手动编辑时多了逗号或缺了引号
-
-### 推荐修复方式
-
-先备份旧文件：
+如果需要结构化查看：
 
 ```powershell
-Copy-Item $env:USERPROFILE\.ccc\config.json $env:USERPROFILE\.ccc\config.json.backup -ErrorAction SilentlyContinue
+ccc config show | ConvertFrom-Json
 ```
 
-然后直接用：
+### 推荐迁移方式
 
 ```powershell
-ccc --edit
+ccc config migrate
 ```
 
-或重新创建：
+这会把当前读取到的旧配置写入新路径。
+
+### 如果配置文件损坏
+
+先备份：
 
 ```powershell
-Set-Content -Path $env:USERPROFILE\.ccc\config.json -Value "[]" -Encoding utf8
-ccc --add
+Copy-Item "$env:APPDATA\ccc\config.json" "$env:APPDATA\ccc\config.json.backup" -ErrorAction SilentlyContinue
 ```
 
-### 正确的最小配置示例
+然后优先用命令重新创建 profile，而不是手动拼 JSON：
+
+```powershell
+ccc profile add `
+  --api-key your-api-key `
+  --preset anthropic `
+  --name "Claude Official"
+```
+
+### 当前最小配置示例
 
 ```json
-[
-  {
-    "name": "ZHIPU AI",
-    "env": {
-      "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
-      "ANTHROPIC_AUTH_TOKEN": "your-api-key",
-      "ANTHROPIC_MODEL": "glm-5",
-      "ANTHROPIC_SMALL_FAST_MODEL": "glm-4.7"
+{
+  "version": 1,
+  "current_profile": "claude-official",
+  "profiles": [
+    {
+      "id": "claude-official",
+      "name": "Claude Official",
+      "provider": "anthropic",
+      "command": "claude",
+      "base_url": "https://api.anthropic.com",
+      "api_key": "your-api-key",
+      "model": "claude-3-7-sonnet",
+      "sync_external": true
     }
-  }
-]
+  ]
+}
 ```
 
 不要把真实 API Key 写进文档、截图或 issue。
 
-## 4. 如何验证配置是否有效
+## 4. 如何验证当前 profile 是否正确
 
 ```powershell
-ccc --list
-ccc --show
-ccc --validate
+ccc profile list
+ccc current
+ccc run --dry-run
+ccc sync --dry-run
 ```
 
-说明：
+建议关注：
 
-- `--show` 只会部分显示密钥
-- `--validate` 会按当前 `command` 校验 `ANTHROPIC_*` 或 `OPENAI_*`
+- 当前读取的是哪个配置文件
+- `current_profile` 是否存在
+- `command` 是 `claude` 还是 `codex`
+- `base_url` / `model` 是否符合你的实际 provider
+- 外部同步目标是否符合预期
 
-## 5. `ccc` 命令无法使用
+## 5. `ccc` 或当前 profile 命令无法使用
 
-先检查 PowerShell profile 和 PATH 是否生效：
+先区分两类问题：
+
+1. `ccc` 自己找不到
+2. `ccc` 找得到，但当前 profile 的 `claude` / `codex` 找不到
+
+### 检查 `ccc`
 
 ```powershell
 Get-Command ccc -ErrorAction SilentlyContinue
-$env:PATH -split ';'
+Test-Path "$env:LOCALAPPDATA\Programs\ccc\bin\ccc.exe"
 ```
 
-如果安装刚完成但当前窗口还没加载新环境，重开一个 PowerShell 窗口再试。
+### 检查当前 profile 目标命令
+
+```powershell
+ccc doctor
+ccc current
+Get-Command claude -ErrorAction SilentlyContinue
+Get-Command codex -ErrorAction SilentlyContinue
+```
+
+如果 `ccc doctor` 提示当前 profile 命令不在 `PATH`，优先修正 Node/npm 和目标 CLI 安装状态。
 
 ## 6. 完全重装
 
+如果你要完整重装二进制，建议先把安装脚本保存到本地，再执行卸载和安装：
+
 ```powershell
-ccc --uninstall
-irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
+Invoke-WebRequest https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 -OutFile .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Action uninstall
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-如果只想重建配置文件：
+如果你只想重建配置文件：
 
 ```powershell
-Remove-Item $env:USERPROFILE\.ccc\config.json -Force
-ccc --add
+Remove-Item "$env:APPDATA\ccc\config.json" -Force -ErrorAction SilentlyContinue
+ccc profile add `
+  --api-key your-api-key `
+  --preset anthropic `
+  --name "Claude Official"
 ```

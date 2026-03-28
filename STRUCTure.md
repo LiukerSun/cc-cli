@@ -1,55 +1,94 @@
 # CC-CLI 项目结构
 
+当前仓库处于 Go 重构阶段，目录分成三部分：
+
+1. 新的 Go 实现
+2. 过渡期安装与文档
+3. 过渡期兼容入口
+
 ```text
 cc-cli/
-├── bin/
-│   ├── ccc                        # Bash 主脚本
-│   └── ccc.ps1                    # PowerShell 主脚本
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                # Linux / Windows CI
+│       └── release.yml           # tag 发布到 GitHub Releases
+├── cmd/
+│   └── ccc/                      # Go CLI 入口
+├── internal/
+│   ├── app/                      # 命令分发
+│   ├── buildinfo/                # 版本注入
+│   ├── config/                   # 新配置 schema 与迁移读取
+│   ├── deps/                     # Node/npm/claude/codex 检查与自动安装
+│   ├── legacy/                   # 旧路径探测
+│   ├── platform/                 # 目录布局与平台路径
+│   ├── runner/                   # 运行计划与命令执行
+│   └── sync/                     # Claude / Codex 外部配置同步
 ├── docs/
-│   ├── configuration.md           # 配置说明
-│   ├── USAGE.md                   # 使用指南
-│   └── windows-troubleshooting.md # Windows 故障排除
+│   ├── configuration.md          # 当前配置模型
+│   ├── go-refactor.md            # 重构里程碑说明
+│   ├── USAGE.md                  # 当前 Go CLI 使用方式
+│   └── windows-troubleshooting.md
 ├── tests/
-│   ├── install_best_effort.sh     # 安装器 best-effort 行为测试
-│   ├── install_requires_node.sh   # 安装器必须先有 Node.js 的测试
-│   └── test.sh                    # 旧测试脚本
-├── CHANGELOG.md                   # 更新日志
-├── CONTRIBUTING.md                # 贡献指南
-├── LICENSE                        # MIT 许可证
-├── README.md                      # 主文档
-├── STRUCTure.md                   # 本文件
-├── VERSION                        # 当前版本号
-├── config.example.json            # 示例配置
-├── install.ps1                    # PowerShell 安装脚本
-├── install.sh                     # Bash 安装脚本
-└── Makefile                       # 辅助构建文件
+│   ├── install_best_effort.sh    # 安装 / 卸载 smoke test
+│   ├── check_version.sh          # VERSION 与 tag 一致性校验
+│   ├── install_requires_node.sh  # 安装器不再依赖 Node.js 的验证
+│   ├── install_windows.ps1       # Windows 安装器 smoke test
+│   └── test.sh                   # 当前 Go CLI smoke test
+├── bin/
+│   ├── ccc                       # 兼容 wrapper，转发到已安装 Go 二进制
+│   └── ccc.ps1                   # Windows 兼容 wrapper
+├── .goreleaser.yaml              # Go release 打包配置
+├── config.example.json           # 新配置示例
+├── install.ps1                   # Windows 薄安装器
+├── install.sh                    # Unix 薄安装器
+├── README.md                     # 当前主文档
+└── VERSION                       # 当前版本号
 ```
 
 ## 关键文件说明
 
-- `bin/ccc`
-  - Linux / macOS 下的主入口
-  - 负责模型选择、配置读写、Claude/Codex 启动与同步
-- `bin/ccc.ps1`
-  - Windows PowerShell 下的主入口
-  - 与 Bash 版本保持尽量一致的行为
-- `install.sh`
-  - Bash 安装器
-  - 负责复制脚本、写入 PATH、检查 Node.js、尽力补装缺失 CLI
-- `install.ps1`
-  - PowerShell 安装器
-  - 负责安装脚本、配置 PowerShell 包装器和 PATH
-- `docs/`
-  - 存放面向用户的详细文档
-- `tests/`
-  - 存放安装流程与脚本行为的验证脚本
+- `cmd/ccc/main.go`
+  - Go CLI 可执行入口
+- `internal/app`
+  - 命令路由和用户可见命令行为
+- `internal/config`
+  - 新配置 schema、旧配置导入、持久化
+- `internal/deps`
+  - `node` / `npm` / `claude` / `codex` 检查与按需自动安装
+- `internal/runner`
+  - 构造运行计划、透传参数、实际执行目标 CLI
+- `internal/sync`
+  - 同步 `~/.claude/settings.json` 和 `~/.codex/*`
+- `install.sh` / `install.ps1`
+  - 薄安装器
+  - 本地仓库里优先直接构建
+  - release 场景下载预编译二进制
+- `.github/workflows/ci.yml`
+  - Linux / Windows 基础 CI
+- `.github/workflows/release.yml`
+  - tag 推送后执行 GoReleaser 发布
+- `bin/ccc` / `bin/ccc.ps1`
+  - 兼容 wrapper
+  - 不再承载主业务逻辑
+
+## 当前主线
+
+如果修改的是以下内容，通常应该优先在 Go 实现中完成，而不是继续扩展旧脚本：
+
+- 配置模型
+- 运行行为
+- 依赖检测
+- CLI 自动安装
+- 外部配置同步
+- 安装路径与发布流程
 
 ## 文档同步约定
 
 如果修改以下行为，通常需要同步更新 README 或 `docs/`：
 
 - 命令行参数
-- 安装前置条件
-- 自动安装 / 升级 / 卸载行为
+- 安装行为
+- 默认目录布局
 - 配置格式
-- Windows 专项问题排查说明
+- 外部配置同步行为
+- 运行时依赖要求

@@ -1,243 +1,275 @@
 # 配置指南
 
-## 配置文件位置
+## 当前配置文件位置
 
-CC-CLI 的配置文件位于：
+新的 Go 实现默认使用：
 
 ```text
-~/.ccc/config.json
+Linux / macOS: ~/.config/ccc/config.json
+Windows: %APPDATA%\ccc\config.json
 ```
 
-配置文件是一个 JSON 数组；每个对象代表一个可选模型。
-如果本地还存在旧版路径 `~/.cc-config.json` / `~/.cc-cli/`，新版 `ccc` 会在首次运行时自动迁移到 `~/.ccc/`。
+旧配置位置：
 
-## 配置结构
+- `~/.ccc/config.json`
+- `~/.cc-config.json`
+
+仍然可以读取，但建议执行：
+
+```bash
+ccc config migrate
+```
+
+把内容写入新路径。
+
+## 当前配置结构
+
+当前配置文件是一个 JSON 对象，不再是旧版的数组格式。
+
+示例：
+
+```json
+{
+  "version": 1,
+  "current_profile": "codex-relay",
+  "profiles": [
+    {
+      "id": "codex-relay",
+      "name": "Codex Relay",
+      "provider": "custom",
+      "command": "codex",
+      "base_url": "https://relay.example.com",
+      "api_key": "sk-xxx",
+      "model": "gpt-5.4",
+      "fast_model": "gpt-5.4-mini",
+      "env": {
+        "OPENAI_ORG": "example"
+      },
+      "sync_external": true
+    }
+  ]
+}
+```
+
+## 字段说明
+
+### 顶层字段
+
+- `version`
+  - 配置版本号
+  - 当前固定为 `1`
+- `current_profile`
+  - 当前默认使用的 profile id
+  - 可为空
+- `profiles`
+  - profile 列表
+
+### profile 字段
+
+- `id`
+  - profile 唯一标识
+  - 推荐使用小写字母、数字和 `-`
+- `name`
+  - 显示名称
+- `provider`
+  - provider 类型
+  - 当前常见值：`anthropic`、`openai`、`zhipu`、`custom`、`legacy-import`
+- `command`
+  - 目标命令
+  - 当前支持：`claude`、`codex`
+- `base_url`
+  - API 端点
+- `api_key`
+  - API key
+- `model`
+  - 主模型
+- `fast_model`
+  - 快速模型
+  - 未设置时通常会退回主模型
+- `env`
+  - 额外环境变量
+- `sync_external`
+  - 是否在 `sync` / `run` 时同步外部配置文件
+
+## Claude profile 示例
+
+```json
+{
+  "id": "claude-official",
+  "name": "Claude Official",
+  "provider": "anthropic",
+  "command": "claude",
+  "base_url": "https://api.anthropic.com",
+  "api_key": "sk-ant-xxx",
+  "model": "claude-3-7-sonnet",
+  "fast_model": "claude-3-5-haiku",
+  "sync_external": true
+}
+```
+
+运行时会注入：
+
+- `ANTHROPIC_BASE_URL`
+- `ANTHROPIC_AUTH_TOKEN`
+- `ANTHROPIC_MODEL`
+- `ANTHROPIC_SMALL_FAST_MODEL`
+- `CLAUDE_CODE_MODEL`
+- `CLAUDE_CODE_SMALL_MODEL`
+- `CLAUDE_CODE_SUBAGENT_MODEL`
+
+## Codex profile 示例
+
+```json
+{
+  "id": "codex-relay",
+  "name": "Codex Relay",
+  "provider": "custom",
+  "command": "codex",
+  "base_url": "https://relay.example.com",
+  "api_key": "sk-xxx",
+  "model": "gpt-5.4",
+  "fast_model": "gpt-5.4-mini",
+  "sync_external": true
+}
+```
+
+运行时会注入：
+
+- `OPENAI_BASE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_SMALL_FAST_MODEL`
+
+并同步：
+
+- `~/.codex/config.toml`
+- `~/.codex/auth.json`
+
+`base_url` 在写入 Codex 配置文件时会规范化为 `/v1`。
+
+## Zhipu Claude-compatible profile 示例
+
+```json
+{
+  "id": "zhipu-claude-compatible",
+  "name": "Zhipu Claude-Compatible",
+  "provider": "zhipu",
+  "command": "claude",
+  "base_url": "https://open.bigmodel.cn/api/anthropic",
+  "api_key": "sk-xxx",
+  "model": "glm-5",
+  "fast_model": "glm-4.7",
+  "sync_external": true
+}
+```
+
+## preset 辅助
+
+当前 `profile add` 支持以下 preset：
+
+- `anthropic`
+- `openai`
+- `zhipu`
+
+例如：
+
+```bash
+ccc profile add --preset anthropic --api-key sk-ant-xxx
+ccc profile add --preset openai --api-key sk-xxx
+ccc profile add --preset zhipu --api-key sk-xxx
+```
+
+preset 会为以下字段提供默认值：
+
+- `name`
+- `provider`
+- `command`
+- `base_url`
+- `model`
+- `fast_model`
+
+如果你显式传入这些字段，显式值优先。
+
+## 从旧配置导入
+
+旧 Bash 配置数组仍可被读取，例如：
 
 ```json
 [
   {
-    "name": "模型显示名称",
-    "command": "可选，默认 claude；使用 Codex 时填 codex",
+    "name": "Claude (Official)",
     "env": {
-      "ANTHROPIC_BASE_URL": "API 端点 URL",
-      "ANTHROPIC_AUTH_TOKEN": "API 密钥",
-      "ANTHROPIC_MODEL": "主模型 ID",
-      "ANTHROPIC_SMALL_FAST_MODEL": "快速模型 ID"
+      "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+      "ANTHROPIC_AUTH_TOKEN": "token",
+      "ANTHROPIC_MODEL": "claude-main"
     }
   }
 ]
 ```
 
-## 字段说明
+当前 Go CLI 会在读取时自动把它转换为新结构，并标记：
 
-- `name`
-  - 模型显示名称，必填
-- `command`
-  - 启动命令，可选
-  - 默认值为 `claude`
-  - 目前支持：`claude`、`codex`
-- `env`
-  - 目标命令需要的环境变量集合，必填
+- `provider = "legacy-import"`
 
-### `command = "claude"` 时的必需字段
+但只有执行 `ccc config migrate` 后，才会真正写成新格式。
 
-- `env.ANTHROPIC_BASE_URL`
-- `env.ANTHROPIC_AUTH_TOKEN`
-- `env.ANTHROPIC_MODEL`
+## 推荐操作方式
 
-可选字段：
-
-- `env.ANTHROPIC_SMALL_FAST_MODEL`
-  - 未设置时默认与主模型相同
-
-### `command = "codex"` 时的必需字段
-
-- `env.OPENAI_BASE_URL`
-- `env.OPENAI_API_KEY`
-- `env.OPENAI_MODEL`
-
-可选字段：
-
-- `env.OPENAI_SMALL_FAST_MODEL`
-  - 未设置时默认与主模型相同
-
-## 推荐配置方式
-
-### 方法 1：交互式添加
+### 查看当前配置
 
 ```bash
-ccc --add
+ccc config show
 ```
 
-当前交互式入口包括：
-
-1. ZHIPU AI
-2. Alibaba Coding Plan
-3. OpenAI Codex
-4. Manual input (Claude-compatible)
-
-其中：
-- `OpenAI Codex` 分支使用内置的 Codex 模型列表，不请求远端 `/models`
-- 其他入口默认生成 Claude-compatible 配置
-
-### 方法 2：编辑配置文件
+### 查看配置文件路径
 
 ```bash
-ccc --edit
+ccc config path
 ```
 
-### 方法 3：手动编辑
+### 添加 profile
 
 ```bash
-nano ~/.ccc/config.json
+ccc profile add \
+  --name "Codex Relay" \
+  --preset openai \
+  --base-url https://relay.example.com \
+  --api-key sk-xxx \
+  --model gpt-5.4
 ```
 
-## 示例配置
-
-### Claude-compatible
-
-```json
-{
-  "name": "Claude (Official)",
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
-    "ANTHROPIC_AUTH_TOKEN": "sk-ant-xxxxx",
-    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
-    "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-5-haiku-20241022"
-  }
-}
-```
-
-### OpenAI / Codex
-
-```json
-{
-  "name": "Codex (OpenAI)",
-  "command": "codex",
-  "env": {
-    "OPENAI_BASE_URL": "https://api.openai.com/v1",
-    "OPENAI_API_KEY": "sk-xxxxx",
-    "OPENAI_MODEL": "gpt-5.4"
-  }
-}
-```
-
-### 第三方 OpenAI 兼容中转
-
-```json
-{
-  "name": "Codex (Relay)",
-  "command": "codex",
-  "env": {
-    "OPENAI_BASE_URL": "https://relay.example.com",
-    "OPENAI_API_KEY": "sk-xxxxx",
-    "OPENAI_MODEL": "gpt-5.4-mini"
-  }
-}
-```
-
-说明：
-- 对于 Codex 配置，`ccc` 会在运行时把根域名自动规范化为 `/v1`
-- 例如 `https://relay.example.com` 会写入为 `https://relay.example.com/v1`
-
-## Codex 配置同步
-
-当选中的模型 `command = "codex"` 时，`ccc` 会自动同步：
-
-- `~/.codex/config.toml`
-  - `model_provider = "codex"`
-  - `model = "<当前模型>"`
-  - `[model_providers.codex].base_url = "<规范化后的 /v1 地址>"`
-  - `wire_api = "responses"`
-- `~/.codex/auth.json`
-  - `OPENAI_API_KEY`
-
-注意：
-- `ccc` 不会在 Codex 路径下继续注入旧的 `OPENAI_BASE_URL` 运行时环境变量
-- 相关信息会优先写入 Codex 官方配置文件
-
-## Claude Team Subagent 同步
-
-当选中的模型 `command = "claude"` 时，`ccc` 会自动更新：
-
-```text
-~/.claude/settings.json
-```
-
-写入内容包括：
-
-- `CLAUDE_CODE_MODEL`
-- `CLAUDE_CODE_SMALL_MODEL`
-- `CLAUDE_CODE_SUBAGENT_MODEL`
-
-这样 Claude Code 的 team subagent 会跟随当前选择的模型。
-
-## 查看和校验配置
+### 切换当前 profile
 
 ```bash
-ccc --list
-ccc --show
-ccc --current
-ccc --validate
+ccc profile use codex-relay
 ```
 
-说明：
-- `--show` 只会部分显示 API Key
-- `--validate` 会根据 `command` 动态检查 `ANTHROPIC_*` 或 `OPENAI_*` 字段
-- 在安装了 `jq` 的环境中，`--validate` 可以更可靠地修复无效项
+### 删除 profile
+
+```bash
+ccc profile delete codex-relay
+```
+
+### 更新 profile
+
+```bash
+ccc profile update codex-relay --model gpt-5.4
+ccc profile update codex-relay --env OPENAI_ORG=example
+ccc profile update codex-relay --unset-env OPENAI_ORG
+ccc profile update codex-relay --clear-env --no-sync
+```
 
 ## 安全建议
 
-- 不要把 `~/.ccc/config.json` 提交到公开仓库
-- 建议把 `.ccc/` 加入你的项目 `.gitignore`
-- 如果需要使用 GUI 编辑器，可以设置环境变量 `EDITOR`
+- 不要把配置文件提交到公开仓库
+- `api_key` 当前仍以明文形式保存在本地配置文件中
+- 如果共享机器，注意文件权限和 shell 历史
 
-例如：
+## 诊断
 
-```bash
-EDITOR=code ccc --edit
-```
-
-## 与 CLI 安装相关的行为
-
-- `install.sh` / `install.ps1` 运行前要求机器已安装 Node.js
-- 在 Node.js 已安装的前提下，安装器会尽力自动补装缺失的 `claude` / `codex`
-- 运行 `ccc` 时，如果当前目标 CLI 缺失，脚本也会按需再次尝试安装
-
-手动安装命令：
+如果你不确定当前配置是否来自新路径、旧路径或是否已经迁移，优先执行：
 
 ```bash
-npm install -g @anthropic-ai/claude-code
-npm install -g @openai/codex
+ccc doctor
+ccc config show
 ```
-
-最低 Node.js 要求：
-
-- Claude CLI: `>= 18.0.0`
-- Codex CLI: `>= 16.0.0`
-
-## 常见问题
-
-### 配置文件损坏
-
-```bash
-cp ~/.ccc/config.json ~/.ccc/config.json.backup
-ccc --add
-```
-
-### 权限问题
-
-```bash
-chmod 755 ~/.ccc
-chmod +x ~/bin/ccc
-```
-
-### `--validate` 修复能力有限
-
-如果当前环境没有 `jq`，Bash 版本只能做基础检查；复杂损坏场景建议直接：
-
-```bash
-ccc --edit
-```
-
-或重新创建配置。

@@ -1,6 +1,7 @@
 # Binaries
 /cc
 /cc-cli
+/ccc
 
 # Configuration
 .cc-config.json
@@ -34,9 +35,11 @@ blog.md
 # Test files
 test-results/
 coverage/
+coverage.out
 
 # Development files
 DEVELOPMENT.md
+dist/
 
 # Claude Code local settings
 .claude/

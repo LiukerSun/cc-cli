@@ -1,12 +1,23 @@
-.PHONY
-# Build script for trav CI
+PROJECT_NAME := ccc
 
-sudo apt-get install -yqq
+.PHONY: build test test-go test-shell test-installers test-version ci
 
-echo -e "${YELLOW}Installing yq...${NC}
+build:
+	go build ./cmd/ccc
 
-# Check for macOS
-if [[ "$OST" == "Darwin"* ]]; then
-    echo -e "${YELLOW}Detected macOS. Installing yq...${NC}"
-    brew install
-fi
+test-go:
+	go test ./...
+
+test-version:
+	bash tests/check_version.sh
+
+test-shell:
+	bash tests/test.sh
+
+test-installers:
+	bash tests/install_requires_node.sh
+	bash tests/install_best_effort.sh
+
+test: test-version test-go test-shell test-installers
+
+ci: test build

@@ -1,64 +1,107 @@
 #!/bin/bash
 
-# Test script for CC-cli
+set -euo pipefail
 
-set -e
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
+HOME_DIR="$TMP_DIR/home"
+BIN_DIR="$HOME_DIR/.local/bin"
+CONFIG_FILE="$HOME_DIR/.config/ccc/config.json"
+CCC_BIN="$BIN_DIR/ccc"
 
-SCRIPT_dir="$(dirname "$0")"
-config_file="$HOME/.ccc/config.json"
+mkdir -p "$BIN_DIR"
 
-echo "Running cc-cli tests..."
+(
+    cd "$REPO_DIR"
+    HOME="$HOME_DIR" \
+    GOCACHE="$TMP_DIR/go-cache" \
+    go build -o "$CCC_BIN" ./cmd/ccc
+)
 
-# Test help
-echo -e "${YELLOW}Testing: --help${NC}"
-if ! ~/bin/ccc --help | grep -q "Usage:"; then
-    echo -e "${GREEN}✓ --help works${NC}"
-else
-    echo -e "${RED}✗ --help failed${NC}"
+HOME="$HOME_DIR"
+PATH="$BIN_DIR:/usr/bin:/bin"
+
+if ! "$CCC_BIN" help | grep -q "ccc profile add"; then
+    echo "expected help output to include profile commands" >&2
     exit 1
 fi
 
-echo ""
-
-# Test --list
-echo -e "${YELLOW}Testing: --list${NC}"
-if ! ~/bin/ccc --list | grep -q "Available AI Models"; then
-    echo -e "${GREEN}✓ --list works${NC}"
-else
-    echo -e "${RED}✗ --list failed${NC}"
+if ! "$CCC_BIN" profile add \
+    --preset anthropic \
+    --name "Claude Test" \
+    --api-key test-key \
+    --model test-model > "$TMP_DIR/profile-add.txt"; then
+    echo "expected profile add to succeed" >&2
+    cat "$TMP_DIR/profile-add.txt" >&2 || true
     exit 1
 fi
-echo ""
 
-# Test --current (no model selected yet)
-echo -e "${YELLOW}Testing: --current (no model)${NC}"
-if ~/bin/ccc --current | grep -q "Current model:"; then
-    echo -e "${GREEN}✓ --current works${NC}"
-else
-    echo -e "${YELLOW}No model selected${NC}"
-fi
-echo ""
-
-# Test --show-keys
-echo -e "${YELLOW}Testing: --show-keys${NC}"
-if ! ~/bin/ccc --show-keys | grep -q "API Keys"; then
-    echo -e "${GREEN}✓ --show-keys works${NC}"
-else
-    echo -e "${RED}✗ --show-keys failed${NC}"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "expected config file to be created at $CONFIG_FILE" >&2
     exit 1
 fi
-echo ""
 
-# Test configuration file
-if [ -f "$config_file" ]; then
-    echo -e "${GREEN}✓ Config file exists${NC}"
-else
-    echo -e "${RED}✗ Config file not found${NC}"
+if ! "$CCC_BIN" profile list | grep -q "claude-test"; then
+    echo "expected profile list to include generated profile id" >&2
     exit 1
 fi
+
+if ! "$CCC_BIN" current | grep -q "Name: Claude Test"; then
+    echo "expected current profile output to include Claude Test" >&2
+    exit 1
+fi
+
+if ! "$CCC_BIN" profile update claude-test \
+    --name "Claude Prod" \
+    --id claude-prod \
+    --env FOO=bar \
+    --no-sync > "$TMP_DIR/profile-update.txt"; then
+    echo "expected profile update to succeed" >&2
+    cat "$TMP_DIR/profile-update.txt" >&2 || true
+    exit 1
+fi
+
+if ! "$CCC_BIN" current | grep -q "ID: claude-prod"; then
+    echo "expected current profile output to include updated id" >&2
+    exit 1
+fi
+
+if ! "$CCC_BIN" run --dry-run | grep -q "Command: claude"; then
+    echo "expected dry-run output to target claude" >&2
+    exit 1
+fi
+
+if ! "$CCC_BIN" config show | grep -q '"current_profile": "claude-prod"'; then
+    echo "expected config show output to include current profile" >&2
+    exit 1
+fi
+
+if ! "$CCC_BIN" config show | grep -q '"FOO": "bar"'; then
+    echo "expected config show output to include updated env" >&2
+    exit 1
+fi
+
+if ! "$CCC_BIN" upgrade --version 2.2.1 --dry-run | grep -q "Target version: 2.2.1"; then
+    echo "expected upgrade --dry-run output to include target version" >&2
+    exit 1
+fi
+
+if ! HOME="$HOME_DIR" bash "$REPO_DIR/bin/ccc" help > "$TMP_DIR/wrapper-stdout.txt" 2> "$TMP_DIR/wrapper-stderr.txt"; then
+    echo "expected legacy shell wrapper to delegate to installed Go binary" >&2
+    cat "$TMP_DIR/wrapper-stderr.txt" >&2 || true
+    exit 1
+fi
+
+if ! grep -q "ccc profile add" "$TMP_DIR/wrapper-stdout.txt"; then
+    echo "expected wrapper output to come from Go CLI help" >&2
+    exit 1
+fi
+
+if ! grep -q "legacy compatibility wrapper" "$TMP_DIR/wrapper-stderr.txt"; then
+    echo "expected wrapper to print a deprecation warning" >&2
+    exit 1
+fi
+
+echo "test.sh: ok"
