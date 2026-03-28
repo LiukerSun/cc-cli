@@ -310,7 +310,7 @@ ccc doctor
 ```bash
 ccc upgrade --dry-run
 ccc upgrade
-ccc upgrade --version 2.5.5 --dry-run
+ccc upgrade --version 2.5.6 --dry-run
 ```
 
 说明：
