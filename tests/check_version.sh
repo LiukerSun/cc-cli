@@ -17,7 +17,11 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-TAG_INPUT="${1:-${GITHUB_REF_NAME:-}}"
+if [ "$#" -gt 0 ]; then
+    TAG_INPUT="$1"
+else
+    TAG_INPUT="${GITHUB_REF_NAME:-}"
+fi
 if [ -n "$TAG_INPUT" ]; then
     TAG="${TAG_INPUT#refs/tags/}"
     TAG="${TAG#v}"
