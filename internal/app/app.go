@@ -63,6 +63,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "current":
 		return runCurrent(stdout, stderr, home, layout)
+	case "add":
+		return runAdd(stdout, stderr, home, layout, args[1:])
 	case "run":
 		return runRun(stdout, stderr, home, layout, args[1:])
 	case "sync":
@@ -272,6 +274,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc help")
 	fmt.Fprintln(w, "  ccc version")
 	fmt.Fprintln(w, "  ccc current")
+	fmt.Fprintln(w, "  ccc add <preset> <api-key> [model] [--name ...] [--id ...]")
 	fmt.Fprintln(w, "  ccc run [profile-id-or-name] [--dry-run] [--env-only] [-y|--bypass] [-- cli-args...]")
 	fmt.Fprintln(w, "  ccc sync [profile-id-or-name] [--dry-run]")
 	fmt.Fprintln(w, "  ccc profile list [--json]")
@@ -389,8 +392,8 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 	return 0
 }
 
-func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) int {
-	fs := flag.NewFlagSet("profile add", flag.ContinueOnError)
+func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {
+	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	name := fs.String("name", "", "display name")
@@ -406,15 +409,70 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 	envVars := kvFlag{}
 	fs.Var(&envVars, "env", "extra environment variable in KEY=VALUE form; repeatable")
 
-	if err := fs.Parse(args); err != nil {
+	positionalArgs := args
+	flagArgs := []string{}
+	for i, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			positionalArgs = args[:i]
+			flagArgs = args[i:]
+			break
+		}
+	}
+
+	if err := fs.Parse(flagArgs); err != nil {
 		fmt.Fprintf(stderr, "failed to parse flags: %v\n", err)
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu] --api-key ...")
+		fmt.Fprintln(stderr, "usage: ccc add <preset> <api-key> [model] [--name ...] [--id ...]")
+		return 1
+	}
+	if len(positionalArgs) > 3 {
+		fmt.Fprintln(stderr, "usage: ccc add <preset> <api-key> [model] [--name ...] [--id ...]")
 		return 1
 	}
 
+	if len(positionalArgs) >= 1 && strings.TrimSpace(*presetName) == "" {
+		*presetName = positionalArgs[0]
+	}
+	if len(positionalArgs) >= 2 && strings.TrimSpace(*apiKey) == "" {
+		*apiKey = positionalArgs[1]
+	}
+	if len(positionalArgs) >= 3 && strings.TrimSpace(*model) == "" {
+		*model = positionalArgs[2]
+	}
+
+	store := config.NewStore(home, layout)
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:       *name,
+		ID:         *id,
+		PresetName: *presetName,
+		Command:    *command,
+		Provider:   *provider,
+		BaseURL:    *baseURL,
+		APIKey:     *apiKey,
+		Model:      *model,
+		FastModel:  *fastModel,
+		NoSync:     *noSync,
+		EnvVars:    envVars.values,
+	})
+}
+
+type addProfileOptions struct {
+	Name       string
+	ID         string
+	PresetName string
+	Command    string
+	Provider   string
+	BaseURL    string
+	APIKey     string
+	Model      string
+	FastModel  string
+	NoSync     bool
+	EnvVars    map[string]string
+}
+
+func addProfile(stdout, stderr io.Writer, store config.Store, options addProfileOptions) int {
 	cfg, _, err := store.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to load config: %v\n", err)
@@ -422,18 +480,18 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 	}
 
 	profile := config.Profile{
-		ID:           strings.TrimSpace(*id),
-		Name:         strings.TrimSpace(*name),
-		Command:      strings.TrimSpace(*command),
-		Provider:     strings.TrimSpace(*provider),
-		BaseURL:      strings.TrimSpace(*baseURL),
-		APIKey:       strings.TrimSpace(*apiKey),
-		Model:        strings.TrimSpace(*model),
-		FastModel:    strings.TrimSpace(*fastModel),
-		ExtraEnv:     envVars.values,
-		SyncExternal: !*noSync,
+		ID:           strings.TrimSpace(options.ID),
+		Name:         strings.TrimSpace(options.Name),
+		Command:      strings.TrimSpace(options.Command),
+		Provider:     strings.TrimSpace(options.Provider),
+		BaseURL:      strings.TrimSpace(options.BaseURL),
+		APIKey:       strings.TrimSpace(options.APIKey),
+		Model:        strings.TrimSpace(options.Model),
+		FastModel:    strings.TrimSpace(options.FastModel),
+		ExtraEnv:     options.EnvVars,
+		SyncExternal: !options.NoSync,
 	}
-	profile, err = preset.Apply(profile, *presetName)
+	profile, err = preset.Apply(profile, options.PresetName)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to apply preset: %v\n", err)
 		return 1
@@ -459,6 +517,46 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 	fmt.Fprintf(stdout, "Added profile %q with id %q\n", profile.Name, profile.ID)
 	fmt.Fprintf(stdout, "Config written to %s\n", store.Layout.ConfigFile())
 	return 0
+}
+
+func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) int {
+	fs := flag.NewFlagSet("profile add", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	name := fs.String("name", "", "display name")
+	id := fs.String("id", "", "profile id")
+	presetName := fs.String("preset", "", "provider preset")
+	command := fs.String("command", "", "target command")
+	provider := fs.String("provider", "", "provider type")
+	baseURL := fs.String("base-url", "", "base URL")
+	apiKey := fs.String("api-key", "", "API key")
+	model := fs.String("model", "", "main model")
+	fastModel := fs.String("fast-model", "", "fast model")
+	noSync := fs.Bool("no-sync", false, "disable external sync")
+	envVars := kvFlag{}
+	fs.Var(&envVars, "env", "extra environment variable in KEY=VALUE form; repeatable")
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(stderr, "failed to parse flags: %v\n", err)
+		return 1
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu] --api-key ...")
+		return 1
+	}
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:       *name,
+		ID:         *id,
+		PresetName: *presetName,
+		Command:    *command,
+		Provider:   *provider,
+		BaseURL:    *baseURL,
+		APIKey:     *apiKey,
+		Model:      *model,
+		FastModel:  *fastModel,
+		NoSync:     *noSync,
+		EnvVars:    envVars.values,
+	})
 }
 
 func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []string) int {

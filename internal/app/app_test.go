@@ -109,6 +109,41 @@ func TestProfileAddAndList(t *testing.T) {
 	}
 }
 
+func TestTopLevelAddUsesPositionalPresetShortcut(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{
+		"add", "openai", "sk-test", "gpt-5.4-mini",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Run([]string{"current"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("current exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Name: Codex OpenAI") {
+		t.Fatalf("current output missing preset name: %s", output)
+	}
+	if !strings.Contains(output, "Provider: openai") {
+		t.Fatalf("current output missing provider: %s", output)
+	}
+	if !strings.Contains(output, "Command: codex") {
+		t.Fatalf("current output missing command: %s", output)
+	}
+	if !strings.Contains(output, "Model: gpt-5.4-mini") {
+		t.Fatalf("current output missing positional model override: %s", output)
+	}
+}
+
 func TestProfileAddAppliesPresetDefaults(t *testing.T) {
 	setupTestHome(t)
 
