@@ -437,14 +437,17 @@ get_model_command() {
     local start_line=$(grep -n '"name"' "$CONFIG_FILE" | sed -n "${model_index}p" | cut -d: -f1)
     local value=$(awk -v start="$start_line" '
         NR < start { next }
-        /"env"/ { exit }
         /"command":/ {
             gsub(/.*"command": *"/, "");
             gsub(/".*/, "");
             print;
+            found = 1;
             exit
         }
-        NR > start && /}/ { exit }
+        NR > start && /^  }/ { exit }
+        NR > start && /^}/ { exit }
+        NR > start && /^  ],/ { exit }
+        END { if (!found) print "" }
     ' "$CONFIG_FILE")
 
     if [ -n "$value" ]; then
