@@ -25,6 +25,7 @@ import (
 	"github.com/LiukerSun/cc-cli/internal/runner"
 	cfgsync "github.com/LiukerSun/cc-cli/internal/sync"
 	"github.com/LiukerSun/cc-cli/internal/upgrade"
+	"golang.org/x/term"
 )
 
 type pathsReport struct {
@@ -36,6 +37,8 @@ type pathsReport struct {
 var fetchZhipuModels = defaultFetchZhipuModels
 var fetchAlibabaModels = defaultFetchAlibabaModels
 var stdinIsInteractive = isInteractiveInput
+var arrowSelectorEnabled = supportsArrowSelector
+var makeRawSelectorInput = makeRawSelectorMode
 
 var interactiveCodexModels = []string{
 	"gpt-5.4",
@@ -90,8 +93,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(args) == 0 {
-		printHelp(stdout)
-		return 0
+		return runRun(stdout, stderr, home, layout, nil)
 	}
 
 	switch args[0] {
@@ -334,6 +336,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc --version")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Notes:")
+	fmt.Fprintln(w, "  ccc without arguments opens the model selector and runs the selected model.")
 	fmt.Fprintln(w, "  ccc run without a profile opens an interactive selector when used in a terminal.")
 }
 
@@ -1354,6 +1357,10 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 		fmt.Fprintf(stderr, "failed to load config: %v\n", err)
 		return 1
 	}
+	if profileIdentifier == "" && len(cfg.Profiles) == 0 {
+		fmt.Fprintln(stderr, "no profiles configured; use 'ccc add' to add one")
+		return 1
+	}
 
 	if profileIdentifier == "" && len(cfg.Profiles) > 1 && stdinIsInteractive(stdin) {
 		selectedID, err := selectRunProfile(stdin, stdout, cfg)
@@ -1411,6 +1418,13 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 }
 
 func selectRunProfile(stdin io.Reader, stdout io.Writer, cfg config.File) (string, error) {
+	if arrowSelectorEnabled(stdin, stdout) {
+		return selectRunProfileWithArrows(stdin, stdout, cfg)
+	}
+	return selectRunProfileWithNumbers(stdin, stdout, cfg)
+}
+
+func selectRunProfileWithNumbers(stdin io.Reader, stdout io.Writer, cfg config.File) (string, error) {
 	reader := bufio.NewReader(stdin)
 
 	fmt.Fprintln(stdout, "ccc run")
@@ -1448,6 +1462,141 @@ func selectRunProfile(stdin io.Reader, stdout io.Writer, cfg config.File) (strin
 	}
 }
 
+func selectRunProfileWithArrows(stdin io.Reader, stdout io.Writer, cfg config.File) (string, error) {
+	restore, err := makeRawSelectorInput(stdin)
+	if err != nil {
+		return "", err
+	}
+	if restore != nil {
+		defer restore()
+	}
+
+	reader := bufio.NewReader(stdin)
+	selected := 0
+	if cfg.CurrentProfile != "" {
+		for i, profile := range cfg.Profiles {
+			if profile.ID == cfg.CurrentProfile {
+				selected = i
+				break
+			}
+		}
+	}
+
+	renderArrowSelector(stdout, cfg, selected)
+	for {
+		key, err := readSelectorKey(reader)
+		if err != nil {
+			return "", err
+		}
+
+		switch key {
+		case selectorKeyUp:
+			if selected == 0 {
+				selected = len(cfg.Profiles) - 1
+			} else {
+				selected--
+			}
+			renderArrowSelector(stdout, cfg, selected)
+		case selectorKeyDown:
+			if selected == len(cfg.Profiles)-1 {
+				selected = 0
+			} else {
+				selected++
+			}
+			renderArrowSelector(stdout, cfg, selected)
+		case selectorKeyEnter:
+			fmt.Fprint(stdout, "\r\n")
+			return cfg.Profiles[selected].ID, nil
+		case selectorKeyCancel:
+			fmt.Fprint(stdout, "\r\n")
+			return "", fmt.Errorf("selection cancelled")
+		}
+	}
+}
+
+type selectorKey int
+
+const (
+	selectorKeyUnknown selectorKey = iota
+	selectorKeyUp
+	selectorKeyDown
+	selectorKeyEnter
+	selectorKeyCancel
+)
+
+func renderArrowSelector(stdout io.Writer, cfg config.File, selected int) {
+	fmt.Fprint(stdout, "\x1b[H\x1b[2J")
+	fmt.Fprintln(stdout, "ccc")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Use Up/Down to choose a model, Enter to run, q to quit.")
+	fmt.Fprintln(stdout)
+	for i, profile := range cfg.Profiles {
+		prefix := "  "
+		if i == selected {
+			prefix = "> "
+		}
+		current := ""
+		if profile.ID == cfg.CurrentProfile {
+			current = " [current]"
+		}
+		fmt.Fprintf(stdout, "%s%s%s\n", prefix, profile.Name, current)
+		fmt.Fprintf(stdout, "  %s%s | %s | %s\n", prefix, profile.Command, profile.Provider, profile.Model)
+	}
+}
+
+func readSelectorKey(reader *bufio.Reader) (selectorKey, error) {
+	first, err := reader.ReadByte()
+	if err != nil {
+		return selectorKeyUnknown, err
+	}
+
+	switch first {
+	case '\r', '\n':
+		return selectorKeyEnter, nil
+	case 'q', 'Q', 3:
+		return selectorKeyCancel, nil
+	case 'k', 'K':
+		return selectorKeyUp, nil
+	case 'j', 'J':
+		return selectorKeyDown, nil
+	case 0x1b:
+		second, err := reader.ReadByte()
+		if err != nil {
+			return selectorKeyUnknown, err
+		}
+		if second != '[' {
+			return selectorKeyUnknown, nil
+		}
+		third, err := reader.ReadByte()
+		if err != nil {
+			return selectorKeyUnknown, err
+		}
+		switch third {
+		case 'A':
+			return selectorKeyUp, nil
+		case 'B':
+			return selectorKeyDown, nil
+		default:
+			return selectorKeyUnknown, nil
+		}
+	case 0x00, 0xe0:
+		second, err := reader.ReadByte()
+		if err != nil {
+			return selectorKeyUnknown, err
+		}
+		switch second {
+		case 'H':
+			return selectorKeyUp, nil
+		case 'P':
+			return selectorKeyDown, nil
+		default:
+			return selectorKeyUnknown, nil
+		}
+	default:
+		return selectorKeyUnknown, nil
+	}
+}
+
 func isInteractiveInput(stdin io.Reader) bool {
 	file, ok := stdin.(*os.File)
 	if !ok {
@@ -1458,6 +1607,32 @@ func isInteractiveInput(stdin io.Reader) bool {
 		return false
 	}
 	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func supportsArrowSelector(stdin io.Reader, stdout io.Writer) bool {
+	inputFile, ok := stdin.(*os.File)
+	if !ok || !term.IsTerminal(int(inputFile.Fd())) {
+		return false
+	}
+	outputFile, ok := stdout.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(outputFile.Fd()))
+}
+
+func makeRawSelectorMode(stdin io.Reader) (func(), error) {
+	inputFile, ok := stdin.(*os.File)
+	if !ok {
+		return nil, nil
+	}
+	state, err := term.MakeRaw(int(inputFile.Fd()))
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		_ = term.Restore(int(inputFile.Fd()), state)
+	}, nil
 }
 
 func runSync(stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {

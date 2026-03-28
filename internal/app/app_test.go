@@ -107,6 +107,23 @@ func stubInteractiveInput(t *testing.T, interactive bool) {
 	})
 }
 
+func stubArrowSelector(t *testing.T, enabled bool) {
+	t.Helper()
+
+	previousEnabled := arrowSelectorEnabled
+	previousRaw := makeRawSelectorInput
+	arrowSelectorEnabled = func(io.Reader, io.Writer) bool {
+		return enabled
+	}
+	makeRawSelectorInput = func(io.Reader) (func(), error) {
+		return func() {}, nil
+	}
+	t.Cleanup(func() {
+		arrowSelectorEnabled = previousEnabled
+		makeRawSelectorInput = previousRaw
+	})
+}
+
 func TestProfileAddAndList(t *testing.T) {
 	setupTestHome(t)
 
@@ -698,6 +715,101 @@ func TestRunDryRunPromptsForProfileSelection(t *testing.T) {
 	}
 	if savedCfg.CurrentProfile != "codex-relay" {
 		t.Fatalf("CurrentProfile = %q, want codex-relay", savedCfg.CurrentProfile)
+	}
+}
+
+func TestRunDryRunSupportsArrowSelection(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+	store := config.NewStore(home, layout)
+
+	cfg := config.DefaultFile()
+	if err := cfg.UpsertProfile(config.Profile{
+		ID:           "zhipu-main",
+		Name:         "ZHIPU Main",
+		Command:      "claude",
+		Provider:     "zhipu",
+		BaseURL:      "https://open.bigmodel.cn/api/anthropic",
+		APIKey:       "zhipu-key",
+		Model:        "glm-5",
+		FastModel:    "glm-4.7",
+		SyncExternal: true,
+	}); err != nil {
+		t.Fatalf("UpsertProfile #1: %v", err)
+	}
+	if err := cfg.UpsertProfile(config.Profile{
+		ID:           "codex-relay",
+		Name:         "Codex Relay",
+		Command:      "codex",
+		Provider:     "openai",
+		BaseURL:      "https://relay.example.com/v1",
+		APIKey:       "sk-test",
+		Model:        "gpt-5.4-mini",
+		FastModel:    "gpt-5.4-mini",
+		SyncExternal: true,
+	}); err != nil {
+		t.Fatalf("UpsertProfile #2: %v", err)
+	}
+	cfg.CurrentProfile = "zhipu-main"
+	if err := store.Save(cfg); err != nil {
+		t.Fatalf("store.Save: %v", err)
+	}
+
+	stubInteractiveInput(t, true)
+	stubArrowSelector(t, true)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	input := strings.NewReader("\x1b[B\r")
+	if exitCode := runRunWithInput(input, &stdout, &stderr, home, layout, []string{"--dry-run"}); exitCode != 0 {
+		t.Fatalf("runRunWithInput exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Use Up/Down to choose a model") {
+		t.Fatalf("output missing arrow selector help: %s", output)
+	}
+	if !strings.Contains(output, "Command: codex") {
+		t.Fatalf("dry-run output missing selected command: %s", output)
+	}
+}
+
+func TestRunWithoutArgsExecutesOnlyProfile(t *testing.T) {
+	home := setupTestHome(t)
+	binDir := filepath.Join(home, "bin")
+	prependTestPath(t, binDir)
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll binDir: %v", err)
+	}
+	script := "#!/bin/sh\nprintf 'ran:%s\\n' \"$OPENAI_MODEL\"\n"
+	scriptWin := "@echo off\r\necho ran:%OPENAI_MODEL%\r\n"
+	writeTestCommand(t, binDir, "codex", script, scriptWin)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Codex Relay",
+		"--command", "codex",
+		"--base-url", "https://relay.example.com/v1",
+		"--api-key", "sk-test",
+		"--model", "gpt-5.4",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("Run with no args exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "ran:gpt-5.4") {
+		t.Fatalf("output missing executed model: %s", stdout.String())
 	}
 }
 
