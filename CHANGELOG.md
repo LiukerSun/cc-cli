@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [2.5.5] - 2026-03-28
+
+### 修复
+- **恢复旧版 Claude bypass 行为** - `ccc -y` 对 Claude 再次按旧 shell 脚本的方式同时注入 `CLAUDE_SKIP_PERMISSIONS=1`、`IS_SANDBOX=1` 并追加 `--dangerously-skip-permissions`
+
 ## [2.5.4] - 2026-03-28
 
 ### 修复
