@@ -1,14 +1,30 @@
 # CC-CLI - PowerShell Version
 # https://github.com/LiukerSun/cc-cli
 
-$CC_VERSION = "unknown"
-$VERSION_FILE = "$env:USERPROFILE\.cc-cli\VERSION"
-if (Test-Path $VERSION_FILE) {
-    $CC_VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
+$CCC_HOME = "$env:USERPROFILE\.ccc"
+$LEGACY_INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
+$LEGACY_CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
+$INSTALL_DIR = $CCC_HOME
+$SCRIPT_DIR_PATH = "$INSTALL_DIR\bin"
+$LAUNCHER_FILE = "$env:USERPROFILE\bin\ccc.ps1"
+$CONFIG_FILE = "$INSTALL_DIR\config.json"
+$ENV_DIR = "$INSTALL_DIR\tmp"
+$ENV_FILE = "$ENV_DIR\cc-model-env.ps1"
+$VERSION_FILE = "$INSTALL_DIR\VERSION"
+
+$resolvedVersionFile = $VERSION_FILE
+if (-not (Test-Path $resolvedVersionFile)) {
+    $legacyVersionFile = "$LEGACY_INSTALL_DIR\VERSION"
+    if (Test-Path $legacyVersionFile) {
+        $resolvedVersionFile = $legacyVersionFile
+    }
 }
 
-$CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
-$ENV_FILE = "$env:TEMP\cc-model-env.ps1"
+$CC_VERSION = "unknown"
+if (Test-Path $resolvedVersionFile) {
+    $CC_VERSION = (Get-Content $resolvedVersionFile -Raw).Trim()
+}
+
 $CLAUDE_SETTINGS_FILE = "$env:USERPROFILE\.claude\settings.json"
 $CODEX_CONFIG_FILE = "$env:USERPROFILE\.codex\config.toml"
 $CODEX_AUTH_FILE = "$env:USERPROFILE\.codex\auth.json"
@@ -31,6 +47,50 @@ function Save-JsonNoBOM {
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
 }
+
+function Ensure-CccDirectories {
+    foreach ($path in @($INSTALL_DIR, $SCRIPT_DIR_PATH, $ENV_DIR)) {
+        if (-not (Test-Path $path)) {
+            New-Item -ItemType Directory -Force -Path $path | Out-Null
+        }
+    }
+}
+
+function Initialize-CccLayout {
+    Ensure-CccDirectories
+
+    if (-not (Test-Path $CONFIG_FILE) -and (Test-Path $LEGACY_CONFIG_FILE)) {
+        Move-Item -Path $LEGACY_CONFIG_FILE -Destination $CONFIG_FILE
+        Write-Host "Migrated legacy config to $CONFIG_FILE" -ForegroundColor Yellow
+    }
+
+    $legacyInstallScript = "$LEGACY_INSTALL_DIR\install.ps1"
+    $currentInstallScript = "$INSTALL_DIR\install.ps1"
+    if (-not (Test-Path $currentInstallScript) -and (Test-Path $legacyInstallScript)) {
+        Copy-Item -Path $legacyInstallScript -Destination $currentInstallScript -Force
+    }
+
+    $legacyVersionFile = "$LEGACY_INSTALL_DIR\VERSION"
+    if (-not (Test-Path $VERSION_FILE) -and (Test-Path $legacyVersionFile)) {
+        Copy-Item -Path $legacyVersionFile -Destination $VERSION_FILE -Force
+    }
+}
+
+function Write-LauncherScript {
+    $launcherDir = Split-Path $LAUNCHER_FILE -Parent
+    if (-not (Test-Path $launcherDir)) {
+        New-Item -ItemType Directory -Force -Path $launcherDir | Out-Null
+    }
+
+    $launcherContent = @"
+# CC-CLI Launcher
+& "$SCRIPT_DIR_PATH\ccc.ps1" @args
+"@
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($LAUNCHER_FILE, $launcherContent, $utf8NoBom)
+}
+
+Initialize-CccLayout
 
 function Get-ModelCommand {
     param(
@@ -378,7 +438,10 @@ function Show-Version {
 }
 
 function Uninstall-CC {
-    $installScript = "$env:USERPROFILE\.cc-cli\install.ps1"
+    $installScript = "$INSTALL_DIR\install.ps1"
+    if (-not (Test-Path $installScript)) {
+        $installScript = "$LEGACY_INSTALL_DIR\install.ps1"
+    }
     
     if (Test-Path $installScript) {
         & $installScript -Action uninstall @args
@@ -474,10 +537,11 @@ function Upgrade-CC {
     Write-Host ""
     
     $scriptUrl = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/bin/ccc.ps1"
+    $installScriptUrl = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1"
     $versionUrl = "https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION"
-    
-    $installDir = "$env:USERPROFILE\.cc-cli"
-    $scriptFile = "$env:USERPROFILE\bin\ccc.ps1"
+
+    $installDir = $INSTALL_DIR
+    $scriptFile = "$SCRIPT_DIR_PATH\ccc.ps1"
     
     Write-Host "Downloading latest version..." -NoNewline
     
@@ -486,6 +550,7 @@ function Upgrade-CC {
         $webClient.Encoding = [System.Text.Encoding]::UTF8
         
         $scriptContent = $webClient.DownloadString($scriptUrl)
+        $installScriptContent = $webClient.DownloadString($installScriptUrl)
         $versionContent = $webClient.DownloadString($versionUrl).Trim()
         
         Write-Host " Done!"
@@ -493,13 +558,16 @@ function Upgrade-CC {
         
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
         New-Item -ItemType Directory -Force -Path (Split-Path $scriptFile -Parent) | Out-Null
+        New-Item -ItemType Directory -Force -Path $ENV_DIR | Out-Null
         
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::WriteAllText($scriptFile, $scriptContent, $utf8NoBom)
+        [System.IO.File]::WriteAllText("$installDir\install.ps1", $installScriptContent, $utf8NoBom)
         [System.IO.File]::WriteAllText("$installDir\VERSION", $versionContent, $utf8NoBom)
+        Write-LauncherScript
         
         # Migrate from old 'cc' command name
-        $oldScript = "$env:USERPROFILE\bin\cc.ps1"
+        $oldScript = "$(Split-Path $LAUNCHER_FILE -Parent)\cc.ps1"
         if (Test-Path $oldScript) {
             Remove-Item $oldScript -Force
             Write-Host "[OK] Removed old 'cc.ps1' (now use 'ccc')" -ForegroundColor Green
