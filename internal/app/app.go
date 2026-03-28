@@ -1526,18 +1526,22 @@ const (
 )
 
 func printArrowSelectorList(stdout io.Writer, cfg config.File) {
-	fmt.Fprintln(stdout, "ccc")
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Use Up/Down to choose a model, Enter to run, q to quit.")
-	fmt.Fprintln(stdout)
+	writeSelectorLine(stdout, "ccc")
+	writeSelectorLine(stdout, "")
+	writeSelectorLine(stdout, "Use Up/Down to choose a model, Enter to run, q to quit.")
+	writeSelectorLine(stdout, "")
 	for i, profile := range cfg.Profiles {
 		current := ""
 		if profile.ID == cfg.CurrentProfile {
 			current = " [current]"
 		}
-		fmt.Fprintf(stdout, "  %2d) %s%s\n", i+1, profile.Name, current)
-		fmt.Fprintf(stdout, "      %s | %s | %s\n", profile.Command, profile.Provider, profile.Model)
+		writeSelectorLine(stdout, fmt.Sprintf("  %2d) %s%s", i+1, profile.Name, current))
+		writeSelectorLine(stdout, fmt.Sprintf("      %s | %s | %s", profile.Command, profile.Provider, profile.Model))
 	}
+}
+
+func writeSelectorLine(stdout io.Writer, line string) {
+	_, _ = io.WriteString(stdout, line+"\r\n")
 }
 
 func renderArrowSelectorStatus(stdout io.Writer, cfg config.File, selected, previousLength int) int {

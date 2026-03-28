@@ -772,6 +772,9 @@ func TestRunDryRunSupportsArrowSelection(t *testing.T) {
 	if !strings.Contains(output, "Use Up/Down to choose a model") {
 		t.Fatalf("output missing arrow selector help: %s", output)
 	}
+	if !strings.Contains(output, "ccc\r\n\r\nUse Up/Down to choose a model") {
+		t.Fatalf("output missing CRLF selector header formatting: %q", output)
+	}
 	if !strings.Contains(output, "Command: codex") {
 		t.Fatalf("dry-run output missing selected command: %s", output)
 	}
