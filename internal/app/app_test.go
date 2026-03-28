@@ -816,6 +816,42 @@ func TestRunWithoutArgsExecutesOnlyProfile(t *testing.T) {
 	}
 }
 
+func TestTopLevelBypassShortcutExecutesRun(t *testing.T) {
+	home := setupTestHome(t)
+	binDir := filepath.Join(home, "bin")
+	prependTestPath(t, binDir)
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll binDir: %v", err)
+	}
+	script := "#!/bin/sh\nprintf 'arg1:%s\\n' \"$1\"\n"
+	scriptWin := "@echo off\r\necho arg1:%~1\r\n"
+	writeTestCommand(t, binDir, "codex", script, scriptWin)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Codex Relay",
+		"--command", "codex",
+		"--base-url", "https://relay.example.com/v1",
+		"--api-key", "sk-test",
+		"--model", "gpt-5.4",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"-y"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("Run -y exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "arg1:--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("output missing bypass arg: %s", stdout.String())
+	}
+}
+
 func TestRunExecutesTargetCommand(t *testing.T) {
 	home := setupTestHome(t)
 	binDir := filepath.Join(home, "bin")

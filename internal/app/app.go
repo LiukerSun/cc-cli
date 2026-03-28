@@ -95,6 +95,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		return runRun(stdout, stderr, home, layout, nil)
 	}
+	if isTopLevelRunShortcut(args[0]) {
+		return runRun(stdout, stderr, home, layout, args)
+	}
 
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -125,6 +128,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		printHelp(stderr)
 		return 1
+	}
+}
+
+func isTopLevelRunShortcut(arg string) bool {
+	switch arg {
+	case "-y", "--bypass", "--dry-run", "--env-only", "--":
+		return true
+	default:
+		return false
 	}
 }
 
