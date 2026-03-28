@@ -21,6 +21,15 @@ try {
     $env:LOCALAPPDATA = $LocalAppData
     $env:APPDATA = $AppData
 
+    $installScript = Get-Content (Join-Path $RepoDir "install.ps1") -Raw
+    [scriptblock]::Create($installScript).Invoke()
+
+    if (-not (Test-Path $InstallPath)) {
+        throw "expected piped install.ps1 invocation to install ccc.exe at $InstallPath"
+    }
+
+    Remove-Item -Force $InstallPath
+
     & powershell -ExecutionPolicy Bypass -File (Join-Path $RepoDir "install.ps1")
 
     if (-not (Test-Path $InstallPath)) {

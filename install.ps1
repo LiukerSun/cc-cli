@@ -14,11 +14,22 @@ $RepoName = "cc-cli"
 $ProjectName = "ccc"
 $RepoUrl = "https://github.com/$RepoOwner/$RepoName"
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$VersionFile = Join-Path $ScriptDir "VERSION"
+$ScriptPath = $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($ScriptPath) -and -not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
+    $ScriptPath = $PSCommandPath
+}
+
+$ScriptDir = ""
+if (-not [string]::IsNullOrWhiteSpace($ScriptPath)) {
+    $ScriptDir = Split-Path -Parent $ScriptPath
+}
+
 $LocalVersion = "dev"
-if (Test-Path $VersionFile) {
-    $LocalVersion = (Get-Content $VersionFile -Raw).Trim()
+if (-not [string]::IsNullOrWhiteSpace($ScriptDir)) {
+    $VersionFile = Join-Path $ScriptDir "VERSION"
+    if (Test-Path $VersionFile) {
+        $LocalVersion = (Get-Content $VersionFile -Raw).Trim()
+    }
 }
 
 if (-not $Version) {
@@ -111,6 +122,9 @@ function Verify-ChecksumIfAvailable {
 }
 
 function Install-FromLocalCheckout {
+    if ([string]::IsNullOrWhiteSpace($ScriptDir)) {
+        Fail "local checkout build requires a script path; rerun install.ps1 from a checked-out repository"
+    }
     if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
         Fail "go is required to build from a local checkout"
     }
@@ -205,7 +219,7 @@ if ($Action -eq "uninstall") {
     exit 0
 }
 
-$shouldUseLocalBuild = (Test-Path (Join-Path $ScriptDir "go.mod")) -and (Test-Path (Join-Path $ScriptDir "cmd\ccc")) -and (($Version -eq "latest") -or ($Version -eq $LocalVersion) -or ($Version -eq "v$LocalVersion"))
+$shouldUseLocalBuild = (-not [string]::IsNullOrWhiteSpace($ScriptDir)) -and (Test-Path (Join-Path $ScriptDir "go.mod")) -and (Test-Path (Join-Path $ScriptDir "cmd\ccc")) -and (($Version -eq "latest") -or ($Version -eq $LocalVersion) -or ($Version -eq "v$LocalVersion"))
 if ($shouldUseLocalBuild) {
     Install-FromLocalCheckout
 } else {
