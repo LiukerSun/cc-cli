@@ -1482,7 +1482,8 @@ func selectRunProfileWithArrows(stdin io.Reader, stdout io.Writer, cfg config.Fi
 		}
 	}
 
-	renderArrowSelector(stdout, cfg, selected)
+	printArrowSelectorList(stdout, cfg)
+	lastLineLength := renderArrowSelectorStatus(stdout, cfg, selected, 0)
 	for {
 		key, err := readSelectorKey(reader)
 		if err != nil {
@@ -1496,14 +1497,14 @@ func selectRunProfileWithArrows(stdin io.Reader, stdout io.Writer, cfg config.Fi
 			} else {
 				selected--
 			}
-			renderArrowSelector(stdout, cfg, selected)
+			lastLineLength = renderArrowSelectorStatus(stdout, cfg, selected, lastLineLength)
 		case selectorKeyDown:
 			if selected == len(cfg.Profiles)-1 {
 				selected = 0
 			} else {
 				selected++
 			}
-			renderArrowSelector(stdout, cfg, selected)
+			lastLineLength = renderArrowSelectorStatus(stdout, cfg, selected, lastLineLength)
 		case selectorKeyEnter:
 			fmt.Fprint(stdout, "\r\n")
 			return cfg.Profiles[selected].ID, nil
@@ -1524,24 +1525,34 @@ const (
 	selectorKeyCancel
 )
 
-func renderArrowSelector(stdout io.Writer, cfg config.File, selected int) {
-	fmt.Fprint(stdout, "\x1b[H\x1b[2J")
+func printArrowSelectorList(stdout io.Writer, cfg config.File) {
 	fmt.Fprintln(stdout, "ccc")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Use Up/Down to choose a model, Enter to run, q to quit.")
 	fmt.Fprintln(stdout)
 	for i, profile := range cfg.Profiles {
-		prefix := "  "
-		if i == selected {
-			prefix = "> "
-		}
 		current := ""
 		if profile.ID == cfg.CurrentProfile {
 			current = " [current]"
 		}
-		fmt.Fprintf(stdout, "%s%s%s\n", prefix, profile.Name, current)
-		fmt.Fprintf(stdout, "  %s%s | %s | %s\n", prefix, profile.Command, profile.Provider, profile.Model)
+		fmt.Fprintf(stdout, "  %2d) %s%s\n", i+1, profile.Name, current)
+		fmt.Fprintf(stdout, "      %s | %s | %s\n", profile.Command, profile.Provider, profile.Model)
 	}
+}
+
+func renderArrowSelectorStatus(stdout io.Writer, cfg config.File, selected, previousLength int) int {
+	profile := cfg.Profiles[selected]
+	current := ""
+	if profile.ID == cfg.CurrentProfile {
+		current = " [current]"
+	}
+	line := fmt.Sprintf("Selected: %d) %s%s", selected+1, profile.Name, current)
+	padding := ""
+	if previousLength > len(line) {
+		padding = strings.Repeat(" ", previousLength-len(line))
+	}
+	fmt.Fprintf(stdout, "\r%s%s", line, padding)
+	return len(line)
 }
 
 func readSelectorKey(reader *bufio.Reader) (selectorKey, error) {
