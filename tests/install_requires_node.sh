@@ -8,10 +8,11 @@ trap 'chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
 
 HOME_DIR="$TMP_DIR/home"
 BIN_DIR="$HOME_DIR/.local/bin"
+GO_BIN_DIR="$(dirname "$(command -v go)")"
 mkdir -p "$HOME_DIR"
 
 export HOME="$HOME_DIR"
-export PATH="/usr/bin:/bin"
+export PATH="$GO_BIN_DIR:/usr/bin:/bin"
 export CCC_INSTALL_BIN_DIR="$BIN_DIR"
 export GOCACHE="$TMP_DIR/go-cache"
 export GOMODCACHE="$TMP_DIR/go-mod-cache"

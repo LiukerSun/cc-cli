@@ -40,6 +40,36 @@ jobs:
       - name: Verify install and uninstall flow
         run: bash tests/install_best_effort.sh
 
+  test-macos:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate VERSION format
+        run: bash tests/check_version.sh ""
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Build CLI
+        run: go build ./cmd/ccc
+
+      - name: Run CLI smoke test
+        run: bash tests/test.sh
+
+      - name: Verify installer does not require Node.js
+        run: bash tests/install_requires_node.sh
+
+      - name: Verify install and uninstall flow
+        run: bash tests/install_best_effort.sh
+
   test-windows:
     runs-on: windows-latest
     steps:
