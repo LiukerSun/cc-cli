@@ -20,7 +20,7 @@ jobs:
           cache: true
 
       - name: Validate VERSION format
-        run: bash tests/check_version.sh
+        run: bash tests/check_version.sh ""
 
       - name: Run Go tests
         run: go test ./...
@@ -51,7 +51,7 @@ jobs:
 
       - name: Validate VERSION format
         shell: pwsh
-        run: bash tests/check_version.sh
+        run: bash tests/check_version.sh ""
 
       - name: Run Go tests
         shell: pwsh
