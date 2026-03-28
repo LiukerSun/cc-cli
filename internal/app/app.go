@@ -35,6 +35,7 @@ type pathsReport struct {
 
 var fetchZhipuModels = defaultFetchZhipuModels
 var fetchAlibabaModels = defaultFetchAlibabaModels
+var stdinIsInteractive = isInteractiveInput
 
 var interactiveCodexModels = []string{
 	"gpt-5.4",
@@ -331,6 +332,9 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "Compatibility aliases:")
 	fmt.Fprintln(w, "  ccc --help")
 	fmt.Fprintln(w, "  ccc --version")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Notes:")
+	fmt.Fprintln(w, "  ccc run without a profile opens an interactive selector when used in a terminal.")
 }
 
 func printPaths(w io.Writer, report pathsReport) {
@@ -1326,6 +1330,10 @@ func runCurrent(stdout, stderr io.Writer, home string, layout platform.Layout) i
 }
 
 func runRun(stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {
+	return runRunWithInput(os.Stdin, stdout, stderr, home, layout, args)
+}
+
+func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {
 	profileIdentifier, flagArgs, cliArgs := splitRunArgs(args)
 
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
@@ -1345,6 +1353,22 @@ func runRun(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to load config: %v\n", err)
 		return 1
+	}
+
+	if profileIdentifier == "" && len(cfg.Profiles) > 1 && stdinIsInteractive(stdin) {
+		selectedID, err := selectRunProfile(stdin, stdout, cfg)
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to select profile: %v\n", err)
+			return 1
+		}
+		profileIdentifier = selectedID
+		if cfg.CurrentProfile != selectedID {
+			cfg.CurrentProfile = selectedID
+			if err := store.Save(cfg); err != nil {
+				fmt.Fprintf(stderr, "failed to save selected profile: %v\n", err)
+				return 1
+			}
+		}
 	}
 
 	plan, err := runner.BuildPlan(cfg, profileIdentifier, cliArgs, *bypass)
@@ -1384,6 +1408,56 @@ func runRun(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 		return 1
 	}
 	return 0
+}
+
+func selectRunProfile(stdin io.Reader, stdout io.Writer, cfg config.File) (string, error) {
+	reader := bufio.NewReader(stdin)
+
+	fmt.Fprintln(stdout, "ccc run")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Select a model:")
+	for i, profile := range cfg.Profiles {
+		current := ""
+		if profile.ID == cfg.CurrentProfile {
+			current = " [current]"
+		}
+		fmt.Fprintf(stdout, "  %2d) %s%s\n", i+1, profile.Name, current)
+		fmt.Fprintf(stdout, "      %s | %s | %s\n", profile.Command, profile.Provider, profile.Model)
+	}
+
+	defaultChoice := "1"
+	if cfg.CurrentProfile != "" {
+		for i, profile := range cfg.Profiles {
+			if profile.ID == cfg.CurrentProfile {
+				defaultChoice = fmt.Sprintf("%d", i+1)
+				break
+			}
+		}
+	}
+
+	for {
+		value, err := promptWithDefault(reader, stdout, fmt.Sprintf("Choice [1-%d]", len(cfg.Profiles)), defaultChoice)
+		if err != nil {
+			return "", err
+		}
+		var choice int
+		if _, err := fmt.Sscanf(strings.TrimSpace(value), "%d", &choice); err == nil && choice >= 1 && choice <= len(cfg.Profiles) {
+			return cfg.Profiles[choice-1].ID, nil
+		}
+		fmt.Fprintf(stdout, "Please enter a number between 1 and %d.\n", len(cfg.Profiles))
+	}
+}
+
+func isInteractiveInput(stdin io.Reader) bool {
+	file, ok := stdin.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func runSync(stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {

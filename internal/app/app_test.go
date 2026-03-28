@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -91,6 +92,18 @@ func stubInteractiveModelFetchers(t *testing.T, zhipuModels, alibabaModels []str
 	t.Cleanup(func() {
 		fetchZhipuModels = previousZhipu
 		fetchAlibabaModels = previousAlibaba
+	})
+}
+
+func stubInteractiveInput(t *testing.T, interactive bool) {
+	t.Helper()
+
+	previous := stdinIsInteractive
+	stdinIsInteractive = func(io.Reader) bool {
+		return interactive
+	}
+	t.Cleanup(func() {
+		stdinIsInteractive = previous
 	})
 }
 
@@ -613,6 +626,78 @@ func TestRunDryRunUsesCurrentProfile(t *testing.T) {
 	}
 	if !strings.Contains(output, "Args: --help") {
 		t.Fatalf("dry-run output missing args: %s", output)
+	}
+}
+
+func TestRunDryRunPromptsForProfileSelection(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+	store := config.NewStore(home, layout)
+
+	cfg := config.DefaultFile()
+	if err := cfg.UpsertProfile(config.Profile{
+		ID:           "zhipu-main",
+		Name:         "ZHIPU Main",
+		Command:      "claude",
+		Provider:     "zhipu",
+		BaseURL:      "https://open.bigmodel.cn/api/anthropic",
+		APIKey:       "zhipu-key",
+		Model:        "glm-5",
+		FastModel:    "glm-4.7",
+		SyncExternal: true,
+	}); err != nil {
+		t.Fatalf("UpsertProfile #1: %v", err)
+	}
+	if err := cfg.UpsertProfile(config.Profile{
+		ID:           "codex-relay",
+		Name:         "Codex Relay",
+		Command:      "codex",
+		Provider:     "openai",
+		BaseURL:      "https://relay.example.com/v1",
+		APIKey:       "sk-test",
+		Model:        "gpt-5.4-mini",
+		FastModel:    "gpt-5.4-mini",
+		SyncExternal: true,
+	}); err != nil {
+		t.Fatalf("UpsertProfile #2: %v", err)
+	}
+	cfg.CurrentProfile = "zhipu-main"
+	if err := store.Save(cfg); err != nil {
+		t.Fatalf("store.Save: %v", err)
+	}
+
+	stubInteractiveInput(t, true)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	input := strings.NewReader("2\n")
+	if exitCode := runRunWithInput(input, &stdout, &stderr, home, layout, []string{"--dry-run", "--", "--help"}); exitCode != 0 {
+		t.Fatalf("runRunWithInput exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Select a model:") {
+		t.Fatalf("output missing selection prompt: %s", output)
+	}
+	if !strings.Contains(output, "Codex Relay") {
+		t.Fatalf("output missing listed profile: %s", output)
+	}
+	if !strings.Contains(output, "Command: codex") {
+		t.Fatalf("dry-run output missing selected command: %s", output)
+	}
+	if !strings.Contains(output, "OPENAI_MODEL=gpt-5.4-mini") {
+		t.Fatalf("dry-run output missing selected model env: %s", output)
+	}
+
+	savedCfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+	if savedCfg.CurrentProfile != "codex-relay" {
+		t.Fatalf("CurrentProfile = %q, want codex-relay", savedCfg.CurrentProfile)
 	}
 }
 
