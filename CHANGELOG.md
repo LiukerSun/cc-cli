@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-03-28
+
+### 新增
+- **交互式模型添加** - `ccc add` 无参数时进入交互模式，可直接选择 ZAI / ZHIPU AI、Alibaba Coding Plan、OpenAI Codex 或手动输入配置
+- **历史接入方式回归** - ZAI 和千问恢复为接近旧 shell 脚本的交互流程，支持 API Key、模型选择和 Claude-compatible 的主模型 / fast model 配置
+- **Codex 交互配置** - 支持在交互中输入 OpenAI-compatible Base URL、API Key 和模型，并自动规范化到 `/v1`
+
+### 变更
+- **快捷 preset 兼容增强** - 保留 `ccc add openai sk-xxx ...` 快捷模式，并新增 `zai`、`qwen`、`codex` 等 alias 映射
+- **测试同步** - 新增 ZAI / 千问 / Codex 的交互单测，并同步更新 Unix / Windows smoke test 的帮助输出校验
+
 ## [2.2.1] - 2026-03-28
 
 ### 修复
