@@ -17,6 +17,10 @@ export HOME="$HOME_DIR"
 export PATH="$BIN_DIR:/usr/bin:/bin"
 export GOCACHE="$TMP_DIR/go-cache"
 export GOMODCACHE="$TMP_DIR/go-mod-cache"
+export XDG_CONFIG_HOME="$HOME_DIR/.config"
+export XDG_DATA_HOME="$HOME_DIR/.local/share"
+export XDG_CACHE_HOME="$HOME_DIR/.cache"
+export XDG_STATE_HOME="$HOME_DIR/.local/state"
 
 (
     cd "$REPO_DIR"

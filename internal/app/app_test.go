@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/LiukerSun/cc-cli/internal/config"
+	"github.com/LiukerSun/cc-cli/internal/platform"
 )
 
 func setupTestHome(t *testing.T) string {
@@ -351,7 +352,11 @@ func TestConfigMigrateWritesCurrentConfig(t *testing.T) {
 		t.Fatalf("config migrate exitCode = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	newConfigPath := filepath.Join(home, ".config", "ccc", "config.json")
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+	newConfigPath := layout.ConfigFile()
 	if _, err := os.Stat(newConfigPath); err != nil {
 		t.Fatalf("expected migrated config at %s: %v", newConfigPath, err)
 	}
