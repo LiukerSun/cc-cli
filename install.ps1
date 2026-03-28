@@ -157,28 +157,28 @@ function Ensure-NodeAndNpmForCommand {
     }
 
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Warning "[!] Skipping automatic install for $CommandName: Node.js is not installed"
+        Write-Warning "[!] Skipping automatic install for ${CommandName}: Node.js is not installed"
         Write-Host "  Current version: not installed"
         Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  ccc is installed anyway. Install or upgrade Node.js before using '$CommandName'."
+        Write-Host "  ccc is installed anyway. Install or upgrade Node.js before using '${CommandName}'."
         return $false
     }
 
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
         $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
-        Write-Warning "[!] Skipping automatic install for $CommandName: npm is not installed"
+        Write-Warning "[!] Skipping automatic install for ${CommandName}: npm is not installed"
         Write-Host "  Current Node.js version: $currentNodeVersion"
         Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  ccc is installed anyway. Install npm before using '$CommandName'."
+        Write-Host "  ccc is installed anyway. Install npm before using '${CommandName}'."
         return $false
     }
 
     $currentNodeVersion = (& node --version 2>$null | Out-String).Trim()
     if (Test-VersionLessThan -Left $currentNodeVersion -Right $requiredVersion) {
-        Write-Warning "[!] Skipping automatic install for $CommandName: Node.js version is too old"
+        Write-Warning "[!] Skipping automatic install for ${CommandName}: Node.js version is too old"
         Write-Host "  Current version: $currentNodeVersion"
         Write-Host "  Minimum required version: Node.js >= $requiredVersion"
-        Write-Host "  ccc is installed anyway. Upgrade Node.js before using '$CommandName'."
+        Write-Host "  ccc is installed anyway. Upgrade Node.js before using '${CommandName}'."
         return $false
     }
 
