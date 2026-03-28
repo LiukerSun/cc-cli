@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [2.5.4] - 2026-03-28
+
+### 修复
+- **root/sudo 下的 Claude bypass 兼容** - `claude` 在 bypass 模式下继续注入 `CLAUDE_SKIP_PERMISSIONS=1` 和 `IS_SANDBOX=1`，但在 `root` / `sudo` 场景下不再追加会被 CLI 拒绝的 `--dangerously-skip-permissions` 参数
+
 ## [2.5.3] - 2026-03-28
 
 ### 变更

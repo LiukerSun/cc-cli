@@ -39,6 +39,82 @@ func TestBuildPlanUsesCurrentProfile(t *testing.T) {
 	}
 }
 
+func TestBuildPlanSetsClaudeBypassEnv(t *testing.T) {
+	t.Setenv("USER", "dev")
+	t.Setenv("LOGNAME", "dev")
+	t.Setenv("USERNAME", "dev")
+	t.Setenv("SUDO_USER", "")
+
+	cfg := config.File{
+		Version:        1,
+		CurrentProfile: "zhipu-main",
+		Profiles: []config.Profile{
+			{
+				ID:           "zhipu-main",
+				Name:         "Zhipu Main",
+				Command:      "claude",
+				BaseURL:      "https://open.bigmodel.cn/api/anthropic",
+				APIKey:       "test-key",
+				Model:        "glm-5",
+				FastModel:    "glm-4.7",
+				SyncExternal: true,
+			},
+		},
+	}
+
+	plan, err := BuildPlan(cfg, "", nil, true)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if len(plan.Args) == 0 || plan.Args[0] != "--dangerously-skip-permissions" {
+		t.Fatalf("unexpected args: %#v", plan.Args)
+	}
+	if plan.Env["CLAUDE_SKIP_PERMISSIONS"] != "1" {
+		t.Fatalf("CLAUDE_SKIP_PERMISSIONS = %q", plan.Env["CLAUDE_SKIP_PERMISSIONS"])
+	}
+	if plan.Env["IS_SANDBOX"] != "1" {
+		t.Fatalf("IS_SANDBOX = %q", plan.Env["IS_SANDBOX"])
+	}
+}
+
+func TestBuildPlanSkipsClaudeBypassFlagForRoot(t *testing.T) {
+	t.Setenv("USER", "root")
+	t.Setenv("LOGNAME", "root")
+	t.Setenv("USERNAME", "root")
+	t.Setenv("SUDO_USER", "")
+
+	cfg := config.File{
+		Version:        1,
+		CurrentProfile: "zhipu-main",
+		Profiles: []config.Profile{
+			{
+				ID:           "zhipu-main",
+				Name:         "Zhipu Main",
+				Command:      "claude",
+				BaseURL:      "https://open.bigmodel.cn/api/anthropic",
+				APIKey:       "test-key",
+				Model:        "glm-5",
+				FastModel:    "glm-4.7",
+				SyncExternal: true,
+			},
+		},
+	}
+
+	plan, err := BuildPlan(cfg, "", []string{"hello"}, true)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if len(plan.Args) != 1 || plan.Args[0] != "hello" {
+		t.Fatalf("unexpected args: %#v", plan.Args)
+	}
+	if plan.Env["CLAUDE_SKIP_PERMISSIONS"] != "1" {
+		t.Fatalf("CLAUDE_SKIP_PERMISSIONS = %q", plan.Env["CLAUDE_SKIP_PERMISSIONS"])
+	}
+	if plan.Env["IS_SANDBOX"] != "1" {
+		t.Fatalf("IS_SANDBOX = %q", plan.Env["IS_SANDBOX"])
+	}
+}
+
 func TestEnvListStableOrder(t *testing.T) {
 	env := envList(map[string]string{"B": "2", "A": "1"})
 	got := strings.Join(env, ",")

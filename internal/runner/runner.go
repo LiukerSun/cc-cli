@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/LiukerSun/cc-cli/internal/config"
 )
@@ -25,7 +26,7 @@ func BuildPlan(cfg config.File, identifier string, cliArgs []string, bypass bool
 	env := profileEnv(profile)
 	args := append([]string{}, cliArgs...)
 	if bypass {
-		args = append([]string{bypassFlag(profile.Command)}, args...)
+		applyBypass(profile.Command, env, &args)
 	}
 
 	return Plan{
@@ -108,6 +109,37 @@ func bypassFlag(command string) string {
 		return "--dangerously-bypass-approvals-and-sandbox"
 	}
 	return "--dangerously-skip-permissions"
+}
+
+func applyBypass(command string, env map[string]string, args *[]string) {
+	if command == "codex" {
+		*args = append([]string{bypassFlag(command)}, (*args)...)
+		return
+	}
+
+	env["CLAUDE_SKIP_PERMISSIONS"] = "1"
+	env["IS_SANDBOX"] = "1"
+	if claudeBypassFlagAllowed() {
+		*args = append([]string{bypassFlag(command)}, (*args)...)
+	}
+}
+
+func claudeBypassFlagAllowed() bool {
+	if strings.TrimSpace(os.Getenv("SUDO_USER")) != "" {
+		return false
+	}
+
+	userValues := []string{
+		strings.ToLower(strings.TrimSpace(os.Getenv("USER"))),
+		strings.ToLower(strings.TrimSpace(os.Getenv("LOGNAME"))),
+		strings.ToLower(strings.TrimSpace(os.Getenv("USERNAME"))),
+	}
+	for _, value := range userValues {
+		if value == "root" {
+			return false
+		}
+	}
+	return true
 }
 
 func envList(env map[string]string) []string {
