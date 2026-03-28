@@ -35,4 +35,16 @@ if ! grep -q "Please install Node.js first, then rerun the installer." "$TMP_DIR
     exit 1
 fi
 
+if ! grep -q "Recommended for macOS/Linux: install Node.js with nvm" "$TMP_DIR/output.txt"; then
+    echo "expected nvm recommendation for missing node" >&2
+    cat "$TMP_DIR/output.txt" >&2
+    exit 1
+fi
+
+if ! grep -q "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash" "$TMP_DIR/output.txt"; then
+    echo "expected nvm install command for missing node" >&2
+    cat "$TMP_DIR/output.txt" >&2
+    exit 1
+fi
+
 echo "install_requires_node.sh: ok"

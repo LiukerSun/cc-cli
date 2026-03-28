@@ -99,6 +99,7 @@ Node.js is required to install ccc
 ```
 
 表示当前机器还没有安装 Node.js，安装器会直接退出。
+在 macOS / Linux 上，安装器会额外建议优先使用 `nvm` 安装 Node.js，并直接输出安装命令。
 
 ### 2. 运行时无法自动安装目标 CLI
 

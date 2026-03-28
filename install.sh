@@ -119,6 +119,13 @@ version_lt() {
     [ "$(compare_semver "$1" "$2")" = "less" ]
 }
 
+is_windows_platform() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 prepend_npm_global_bin_to_path() {
     if ! command -v npm >/dev/null 2>&1; then
         return 0
@@ -142,6 +149,10 @@ require_node_for_install() {
         echo -e "${RED}✗ Node.js is required to install ccc${NC}"
         echo -e "  Current version: not installed"
         echo -e "  Please install Node.js first, then rerun the installer."
+        if ! is_windows_platform; then
+            echo -e "  Recommended for macOS/Linux: install Node.js with nvm"
+            echo -e "  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash"
+        fi
         return 1
     fi
 

@@ -485,6 +485,10 @@ npm install -g @openai/codex
 
 # 如果运行时提示 "Cannot install claude/codex CLI automatically"
 # 表示 ccc 已安装，但当前机器还不满足目标 CLI 的运行依赖
+#
+# 如果安装器提示机器没有 Node.js：
+# macOS / Linux 推荐优先使用 nvm 安装
+# curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
 ```
 
 **2. 配置文件损坏**
