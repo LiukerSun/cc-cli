@@ -25,11 +25,11 @@ function Assert-Contains {
 
 function Invoke-Ccc {
     param(
-        [string[]]$Args,
+        [string[]]$CommandArgs,
         [string]$FailureMessage
     )
 
-    $output = & $script:CccBin @Args 2>&1
+    $output = & $script:CccBin @CommandArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "$FailureMessage`n$($output | Out-String)"
     }
@@ -76,10 +76,10 @@ try {
         Pop-Location
     }
 
-    $helpOutput = Invoke-Ccc -Args @("help") -FailureMessage "expected help to succeed"
+    $helpOutput = Invoke-Ccc -CommandArgs @("help") -FailureMessage "expected help to succeed"
     Assert-Contains -Text $helpOutput -Needle "ccc profile add" -Message "expected help output to include profile commands"
 
-    $profileAddOutput = Invoke-Ccc -Args @(
+    $profileAddOutput = Invoke-Ccc -CommandArgs @(
         "profile", "add",
         "--preset", "anthropic",
         "--name", "Claude Test",
@@ -92,13 +92,13 @@ try {
         throw "expected config file to be created at $ConfigFile"
     }
 
-    $profileListOutput = Invoke-Ccc -Args @("profile", "list") -FailureMessage "expected profile list to succeed"
+    $profileListOutput = Invoke-Ccc -CommandArgs @("profile", "list") -FailureMessage "expected profile list to succeed"
     Assert-Contains -Text $profileListOutput -Needle "claude-test" -Message "expected profile list to include generated profile id"
 
-    $currentOutput = Invoke-Ccc -Args @("current") -FailureMessage "expected current to succeed"
+    $currentOutput = Invoke-Ccc -CommandArgs @("current") -FailureMessage "expected current to succeed"
     Assert-Contains -Text $currentOutput -Needle "Name: Claude Test" -Message "expected current profile output to include Claude Test"
 
-    $profileUpdateOutput = Invoke-Ccc -Args @(
+    $profileUpdateOutput = Invoke-Ccc -CommandArgs @(
         "profile", "update", "claude-test",
         "--name", "Claude Prod",
         "--id", "claude-prod",
@@ -107,17 +107,17 @@ try {
     ) -FailureMessage "expected profile update to succeed"
     Assert-Contains -Text $profileUpdateOutput -Needle "Updated profile" -Message "expected profile update output to confirm success"
 
-    $updatedCurrentOutput = Invoke-Ccc -Args @("current") -FailureMessage "expected current after update to succeed"
+    $updatedCurrentOutput = Invoke-Ccc -CommandArgs @("current") -FailureMessage "expected current after update to succeed"
     Assert-Contains -Text $updatedCurrentOutput -Needle "ID: claude-prod" -Message "expected current profile output to include updated id"
 
-    $dryRunOutput = Invoke-Ccc -Args @("run", "--dry-run") -FailureMessage "expected run --dry-run to succeed"
+    $dryRunOutput = Invoke-Ccc -CommandArgs @("run", "--dry-run") -FailureMessage "expected run --dry-run to succeed"
     Assert-Contains -Text $dryRunOutput -Needle "Command: claude" -Message "expected dry-run output to target claude"
 
-    $configShowOutput = Invoke-Ccc -Args @("config", "show") -FailureMessage "expected config show to succeed"
+    $configShowOutput = Invoke-Ccc -CommandArgs @("config", "show") -FailureMessage "expected config show to succeed"
     Assert-Contains -Text $configShowOutput -Needle '"current_profile": "claude-prod"' -Message "expected config show output to include current profile"
     Assert-Contains -Text $configShowOutput -Needle '"FOO": "bar"' -Message "expected config show output to include updated env"
 
-    $upgradeOutput = Invoke-Ccc -Args @("upgrade", "--version", "2.2.1", "--dry-run") -FailureMessage "expected upgrade --dry-run to succeed"
+    $upgradeOutput = Invoke-Ccc -CommandArgs @("upgrade", "--version", "2.2.1", "--dry-run") -FailureMessage "expected upgrade --dry-run to succeed"
     Assert-Contains -Text $upgradeOutput -Needle "Target version: 2.2.1" -Message "expected upgrade --dry-run output to include target version"
 
     $wrapperOutput = & powershell -ExecutionPolicy Bypass -File (Join-Path $RepoDir "bin/ccc.ps1") help 2>&1

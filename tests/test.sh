@@ -23,15 +23,24 @@ export XDG_DATA_HOME="$HOME_DIR/.local/share"
 export XDG_CACHE_HOME="$HOME_DIR/.cache"
 export XDG_STATE_HOME="$HOME_DIR/.local/state"
 
+assert_contains() {
+    local haystack="$1"
+    local needle="$2"
+    local message="$3"
+
+    if [[ "$haystack" != *"$needle"* ]]; then
+        echo "$message" >&2
+        exit 1
+    fi
+}
+
 (
     cd "$REPO_DIR"
     go build -o "$CCC_BIN" ./cmd/ccc
 )
 
-if ! "$CCC_BIN" help | grep -q "ccc profile add"; then
-    echo "expected help output to include profile commands" >&2
-    exit 1
-fi
+help_output="$("$CCC_BIN" help)"
+assert_contains "$help_output" "ccc profile add" "expected help output to include profile commands"
 
 if ! "$CCC_BIN" profile add \
     --preset anthropic \
@@ -48,15 +57,11 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-if ! "$CCC_BIN" profile list | grep -q "claude-test"; then
-    echo "expected profile list to include generated profile id" >&2
-    exit 1
-fi
+profile_list_output="$("$CCC_BIN" profile list)"
+assert_contains "$profile_list_output" "claude-test" "expected profile list to include generated profile id"
 
-if ! "$CCC_BIN" current | grep -q "Name: Claude Test"; then
-    echo "expected current profile output to include Claude Test" >&2
-    exit 1
-fi
+current_output="$("$CCC_BIN" current)"
+assert_contains "$current_output" "Name: Claude Test" "expected current profile output to include Claude Test"
 
 if ! "$CCC_BIN" profile update claude-test \
     --name "Claude Prod" \
@@ -68,30 +73,19 @@ if ! "$CCC_BIN" profile update claude-test \
     exit 1
 fi
 
-if ! "$CCC_BIN" current | grep -q "ID: claude-prod"; then
-    echo "expected current profile output to include updated id" >&2
-    exit 1
-fi
+updated_current_output="$("$CCC_BIN" current)"
+assert_contains "$updated_current_output" "ID: claude-prod" "expected current profile output to include updated id"
 
-if ! "$CCC_BIN" run --dry-run | grep -q "Command: claude"; then
-    echo "expected dry-run output to target claude" >&2
-    exit 1
-fi
+dry_run_output="$("$CCC_BIN" run --dry-run)"
+assert_contains "$dry_run_output" "Command: claude" "expected dry-run output to target claude"
 
-if ! "$CCC_BIN" config show | grep -q '"current_profile": "claude-prod"'; then
-    echo "expected config show output to include current profile" >&2
-    exit 1
-fi
+config_show_output="$("$CCC_BIN" config show)"
+assert_contains "$config_show_output" '"current_profile": "claude-prod"' "expected config show output to include current profile"
 
-if ! "$CCC_BIN" config show | grep -q '"FOO": "bar"'; then
-    echo "expected config show output to include updated env" >&2
-    exit 1
-fi
+assert_contains "$config_show_output" '"FOO": "bar"' "expected config show output to include updated env"
 
-if ! "$CCC_BIN" upgrade --version 2.2.1 --dry-run | grep -q "Target version: 2.2.1"; then
-    echo "expected upgrade --dry-run output to include target version" >&2
-    exit 1
-fi
+upgrade_output="$("$CCC_BIN" upgrade --version 2.2.1 --dry-run)"
+assert_contains "$upgrade_output" "Target version: 2.2.1" "expected upgrade --dry-run output to include target version"
 
 if ! HOME="$HOME_DIR" bash "$REPO_DIR/bin/ccc" help > "$TMP_DIR/wrapper-stdout.txt" 2> "$TMP_DIR/wrapper-stderr.txt"; then
     echo "expected legacy shell wrapper to delegate to installed Go binary" >&2
