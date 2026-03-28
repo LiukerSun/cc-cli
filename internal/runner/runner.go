@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"sort"
-	"strings"
 
 	"github.com/LiukerSun/cc-cli/internal/config"
 )
@@ -119,27 +118,7 @@ func applyBypass(command string, env map[string]string, args *[]string) {
 
 	env["CLAUDE_SKIP_PERMISSIONS"] = "1"
 	env["IS_SANDBOX"] = "1"
-	if claudeBypassFlagAllowed() {
-		*args = append([]string{bypassFlag(command)}, (*args)...)
-	}
-}
-
-func claudeBypassFlagAllowed() bool {
-	if strings.TrimSpace(os.Getenv("SUDO_USER")) != "" {
-		return false
-	}
-
-	userValues := []string{
-		strings.ToLower(strings.TrimSpace(os.Getenv("USER"))),
-		strings.ToLower(strings.TrimSpace(os.Getenv("LOGNAME"))),
-		strings.ToLower(strings.TrimSpace(os.Getenv("USERNAME"))),
-	}
-	for _, value := range userValues {
-		if value == "root" {
-			return false
-		}
-	}
-	return true
+	*args = append([]string{bypassFlag(command)}, (*args)...)
 }
 
 func envList(env map[string]string) []string {
