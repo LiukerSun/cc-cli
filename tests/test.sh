@@ -10,11 +10,12 @@ HOME_DIR="$TMP_DIR/home"
 BIN_DIR="$HOME_DIR/.local/bin"
 CONFIG_FILE="$HOME_DIR/.config/ccc/config.json"
 CCC_BIN="$BIN_DIR/ccc"
+GO_BIN_DIR="$(dirname "$(command -v go)")"
 
 mkdir -p "$BIN_DIR"
 
 export HOME="$HOME_DIR"
-export PATH="$BIN_DIR:/usr/bin:/bin"
+export PATH="$BIN_DIR:$GO_BIN_DIR:/usr/bin:/bin"
 export GOCACHE="$TMP_DIR/go-cache"
 export GOMODCACHE="$TMP_DIR/go-mod-cache"
 export XDG_CONFIG_HOME="$HOME_DIR/.config"
