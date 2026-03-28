@@ -94,6 +94,10 @@ jobs:
         shell: pwsh
         run: go build ./cmd/ccc
 
+      - name: Run CLI smoke test
+        shell: pwsh
+        run: ./tests/test_windows.ps1
+
       - name: Verify PowerShell installer
         shell: pwsh
         run: ./tests/install_windows.ps1
