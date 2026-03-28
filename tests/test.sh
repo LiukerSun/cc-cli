@@ -11,7 +11,7 @@ YELLOW='\033[0;33m'
 NC='\033[0m'
 
 SCRIPT_dir="$(dirname "$0")"
-config_file="$HOME/.cc-config.json"
+config_file="$HOME/.ccc/config.json"
 
 echo "Running cc-cli tests..."
 
@@ -56,7 +56,7 @@ fi
 echo ""
 
 # Test configuration file
-if [ ! -f "$config_file" ]; then
+if [ -f "$config_file" ]; then
     echo -e "${GREEN}✓ Config file exists${NC}"
 else
     echo -e "${RED}✗ Config file not found${NC}"

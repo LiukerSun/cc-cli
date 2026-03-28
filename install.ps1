@@ -28,9 +28,13 @@ if ($scriptPath) {
 }
 
 # Installation paths
-$INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
-$CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
-$SCRIPT_FILE = "$env:USERPROFILE\bin\ccc.ps1"
+$INSTALL_DIR = "$env:USERPROFILE\.ccc"
+$LEGACY_INSTALL_DIR = "$env:USERPROFILE\.cc-cli"
+$CONFIG_FILE = "$INSTALL_DIR\config.json"
+$LEGACY_CONFIG_FILE = "$env:USERPROFILE\.cc-config.json"
+$SCRIPT_FILE = "$INSTALL_DIR\bin\ccc.ps1"
+$LAUNCHER_FILE = "$env:USERPROFILE\bin\ccc.ps1"
+$ENV_FILE = "$INSTALL_DIR\tmp\cc-model-env.ps1"
 $CLI_PACKAGES = @{
     claude = "@anthropic-ai/claude-code"
     codex = "@openai/codex"
@@ -64,6 +68,30 @@ function Save-FileNoBOM {
     
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
+function Ensure-CccDirectories {
+    foreach ($path in @($INSTALL_DIR, (Split-Path $SCRIPT_FILE -Parent), (Split-Path $LAUNCHER_FILE -Parent), (Split-Path $ENV_FILE -Parent))) {
+        New-Item -ItemType Directory -Force -Path $path | Out-Null
+    }
+}
+
+function Write-LauncherScript {
+    $launcherContent = @"
+# CC-CLI Launcher
+& "$SCRIPT_FILE" @args
+"@
+
+    Save-FileNoBOM -Path $LAUNCHER_FILE -Content $launcherContent
+}
+
+function Migrate-LegacyPaths {
+    Ensure-CccDirectories
+
+    if (-not (Test-Path $CONFIG_FILE) -and (Test-Path $LEGACY_CONFIG_FILE)) {
+        Move-Item -Path $LEGACY_CONFIG_FILE -Destination $CONFIG_FILE
+        Write-Success "[OK] Migrated legacy config to $CONFIG_FILE"
+    }
 }
 
 function Get-CliPackageName {
@@ -265,11 +293,11 @@ function Check-Requirements {
 function Create-Directories {
     Write-Warning "Creating directories..."
     
-    New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
-    New-Item -ItemType Directory -Force -Path (Split-Path $SCRIPT_FILE -Parent) | Out-Null
+    Ensure-CccDirectories
     
     Write-Success "[OK] Created $INSTALL_DIR"
     Write-Success "[OK] Created $(Split-Path $SCRIPT_FILE -Parent)"
+    Write-Success "[OK] Created $(Split-Path $LAUNCHER_FILE -Parent)"
     Write-Host ""
 }
 
@@ -295,10 +323,12 @@ function Install-Script {
                 Copy-Item -Path $localInstallScript -Destination $installScriptDest -Force
                 Write-Success "[OK] Installed uninstall script to $installScriptDest"
             }
+            Write-LauncherScript
+            Write-Success "[OK] Installed launcher to $LAUNCHER_FILE"
             Write-Success "[OK] Installed ccc.ps1 from local source"
 
             # Migrate from old 'cc' command name
-            $oldScript = Join-Path (Split-Path $SCRIPT_FILE -Parent) "cc.ps1"
+            $oldScript = Join-Path (Split-Path $LAUNCHER_FILE -Parent) "cc.ps1"
             if (Test-Path $oldScript) {
                 Remove-Item $oldScript -Force
                 Write-Success "[OK] Removed old 'cc.ps1' (now use 'ccc')"
@@ -318,8 +348,10 @@ function Install-Script {
         
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::WriteAllText($SCRIPT_FILE, $content, $utf8NoBom)
+        Write-LauncherScript
         
         Write-Success "[OK] Downloaded ccc.ps1 to $SCRIPT_FILE"
+        Write-Success "[OK] Installed launcher to $LAUNCHER_FILE"
         
         # Download install.ps1 for uninstall support
         $installScriptUrl = "$REPO_URL/raw/$Branch/install.ps1"
@@ -342,7 +374,7 @@ function Install-Script {
         }
 
         # Migrate from old 'cc' command name
-        $oldScript = Join-Path (Split-Path $SCRIPT_FILE -Parent) "cc.ps1"
+        $oldScript = Join-Path (Split-Path $LAUNCHER_FILE -Parent) "cc.ps1"
         if (Test-Path $oldScript) {
             Remove-Item $oldScript -Force
             Write-Success "[OK] Removed old 'cc.ps1' (now use 'ccc')"
@@ -374,7 +406,7 @@ function Create-Config {
 function Add-ToPath {
     Write-Warning "Configuring PATH..."
     
-    $binDir = Split-Path $SCRIPT_FILE -Parent
+    $binDir = Split-Path $LAUNCHER_FILE -Parent
     $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
     
     if ($currentPath -notlike "*$binDir*") {
@@ -391,12 +423,12 @@ function Add-ToPath {
 function Create-Wrapper {
     Write-Warning "Creating PowerShell wrapper..."
     
-    $wrapperContent = @'
+    $wrapperContent = @"
 # CC-CLI PowerShell Wrapper
 function ccc {
-    & "$env:USERPROFILE\bin\ccc.ps1" @args
+    & "$SCRIPT_FILE" @args
 }
-'@
+"@
     
     $profileDir = Split-Path $PROFILE -Parent
     if (-not (Test-Path $profileDir)) {
@@ -486,6 +518,13 @@ function Uninstall {
     } else {
         Write-Warning "[!] Script file not found: $SCRIPT_FILE"
     }
+
+    if (Test-Path $LAUNCHER_FILE) {
+        Remove-Item $LAUNCHER_FILE -Force
+        Write-Success "[OK] Removed $LAUNCHER_FILE"
+    } else {
+        Write-Warning "[!] Launcher file not found: $LAUNCHER_FILE"
+    }
     
     # Remove installation directory
     if (Test-Path $INSTALL_DIR) {
@@ -494,22 +533,40 @@ function Uninstall {
     } else {
         Write-Warning "[!] Installation directory not found: $INSTALL_DIR"
     }
+
+    if (Test-Path $LEGACY_INSTALL_DIR) {
+        Remove-Item $LEGACY_INSTALL_DIR -Recurse -Force
+        Write-Success "[OK] Removed legacy directory $LEGACY_INSTALL_DIR"
+    }
     
     # Remove temp env file
-    $ENV_FILE = "$env:TEMP\cc-model-env.ps1"
     if (Test-Path $ENV_FILE) {
         Remove-Item $ENV_FILE -Force
         Write-Success "[OK] Removed $ENV_FILE"
+    }
+
+    $legacyEnvFile = "$env:TEMP\cc-model-env.ps1"
+    if (Test-Path $legacyEnvFile) {
+        Remove-Item $legacyEnvFile -Force
+        Write-Success "[OK] Removed $legacyEnvFile"
     }
     
     # Remove config file (optional)
     if (-not $KeepConfig) {
         $configConfirm = Read-Host "`nDelete config file? (y/N)"
         if ($configConfirm -in @("y", "Y", "yes", "YES")) {
+            $removedConfig = $false
             if (Test-Path $CONFIG_FILE) {
                 Remove-Item $CONFIG_FILE -Force
                 Write-Success "[OK] Removed $CONFIG_FILE"
-            } else {
+                $removedConfig = $true
+            }
+            if (Test-Path $LEGACY_CONFIG_FILE) {
+                Remove-Item $LEGACY_CONFIG_FILE -Force
+                Write-Success "[OK] Removed legacy config $LEGACY_CONFIG_FILE"
+                $removedConfig = $true
+            }
+            if (-not $removedConfig) {
                 Write-Warning "[!] Config file not found: $CONFIG_FILE"
             }
         } else {
@@ -655,6 +712,7 @@ switch ($Action.ToLower()) {
     default {
         Check-Requirements
         Create-Directories
+        Migrate-LegacyPaths
         Install-Script
         Create-Config
         Add-ToPath

@@ -1,6 +1,20 @@
 #!/bin/bash
 
-VERSION_FILE="$HOME/.cc-cli/VERSION"
+CCC_HOME="$HOME/.ccc"
+LEGACY_INSTALL_DIR="$HOME/.cc-cli"
+LEGACY_CONFIG_FILE="$HOME/.cc-config.json"
+INSTALL_DIR="$CCC_HOME"
+CCC_BIN_DIR="$INSTALL_DIR/bin"
+CONFIG_FILE="$INSTALL_DIR/config.json"
+ENV_DIR="$INSTALL_DIR/tmp"
+ENV_FILE="$ENV_DIR/cc-model-env.sh"
+VERSION_FILE="$INSTALL_DIR/VERSION"
+BIN_DIR="$HOME/bin"
+
+if [ ! -f "$VERSION_FILE" ] && [ -f "$LEGACY_INSTALL_DIR/VERSION" ]; then
+    VERSION_FILE="$LEGACY_INSTALL_DIR/VERSION"
+fi
+
 if [ -f "$VERSION_FILE" ]; then
     CC_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
 else
@@ -17,8 +31,6 @@ detect_platform() {
 }
 
 PLATFORM=$(detect_platform)
-CONFIG_FILE="$HOME/.cc-config.json"
-ENV_FILE="/tmp/cc-model-env.sh"
 CLAUDE_SETTINGS_FILE="$HOME/.claude/settings.json"
 CODEX_CONFIG_FILE="$HOME/.codex/config.toml"
 CODEX_AUTH_FILE="$HOME/.codex/auth.json"
@@ -74,9 +86,35 @@ show_version() {
     echo "ccc version $CC_VERSION"
 }
 
+ensure_ccc_directories() {
+    mkdir -p "$INSTALL_DIR" "$CCC_BIN_DIR" "$ENV_DIR"
+}
+
+migrate_legacy_layout() {
+    ensure_ccc_directories
+
+    if [ ! -f "$CONFIG_FILE" ] && [ -f "$LEGACY_CONFIG_FILE" ]; then
+        mv "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+        echo "Migrated legacy config to $CONFIG_FILE" >&2
+    fi
+
+    if [ -d "$LEGACY_INSTALL_DIR" ]; then
+        if [ ! -f "$INSTALL_DIR/VERSION" ] && [ -f "$LEGACY_INSTALL_DIR/VERSION" ]; then
+            cp "$LEGACY_INSTALL_DIR/VERSION" "$INSTALL_DIR/VERSION"
+        fi
+
+        if [ ! -f "$INSTALL_DIR/install.sh" ] && [ -f "$LEGACY_INSTALL_DIR/install.sh" ]; then
+            cp "$LEGACY_INSTALL_DIR/install.sh" "$INSTALL_DIR/install.sh"
+        fi
+    fi
+}
+
 uninstall_cc() {
-    local install_script="$HOME/.cc-cli/install.sh"
-    
+    local install_script="$INSTALL_DIR/install.sh"
+    if [ ! -f "$install_script" ]; then
+        install_script="$LEGACY_INSTALL_DIR/install.sh"
+    fi
+
     if [ -f "$install_script" ]; then
         bash "$install_script" --uninstall "$@"
     else
@@ -189,6 +227,7 @@ upgrade() {
     local tmp_dir
     tmp_dir=$(mktemp -d)
     local script_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/bin/ccc"
+    local install_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh"
     local version_url="https://raw.githubusercontent.com/LiukerSun/cc-cli/main/VERSION"
 
     echo "Downloading latest version..."
@@ -204,25 +243,45 @@ upgrade() {
         rm -rf "$tmp_dir"
         exit 1
     fi
-    
-    local install_dir="$HOME/.cc-cli"
-    local bin_dir="$HOME/bin"
-    
-    mkdir -p "$install_dir"
-    mkdir -p "$bin_dir"
-    
-    chmod +x "$tmp_dir/ccc"
 
-    if ! cp "$tmp_dir/ccc" "$bin_dir/ccc"; then
+    if ! curl -fsSL "$install_url" -o "$tmp_dir/install.sh" 2>/dev/null; then
+        echo "Error: Failed to download install script" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+
+    mkdir -p "$INSTALL_DIR" "$CCC_BIN_DIR" "$BIN_DIR"
+
+    chmod +x "$tmp_dir/ccc" "$tmp_dir/install.sh"
+
+    if ! cp "$tmp_dir/ccc" "$CCC_BIN_DIR/ccc"; then
         echo "Error: Failed to install script" >&2
         rm -rf "$tmp_dir"
         exit 1
     fi
-    
-    if ! cp "$tmp_dir/VERSION" "$install_dir/VERSION"; then
+
+    if ! cp "$tmp_dir/install.sh" "$INSTALL_DIR/install.sh"; then
+        echo "Error: Failed to install install script" >&2
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+
+    if ! cp "$tmp_dir/VERSION" "$INSTALL_DIR/VERSION"; then
         echo "Error: Failed to install VERSION file" >&2
         rm -rf "$tmp_dir"
         exit 1
+    fi
+
+    chmod +x "$CCC_BIN_DIR/ccc" "$INSTALL_DIR/install.sh"
+
+    rm -f "$BIN_DIR/ccc"
+    if ! ln -s "$CCC_BIN_DIR/ccc" "$BIN_DIR/ccc" 2>/dev/null; then
+        if ! cp "$CCC_BIN_DIR/ccc" "$BIN_DIR/ccc"; then
+            echo "Error: Failed to install launcher" >&2
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+        chmod +x "$BIN_DIR/ccc"
     fi
     
     rm -rf "$tmp_dir"
@@ -237,8 +296,8 @@ upgrade() {
     fi
     
     # Migrate from old 'cc' command name
-    if [ -f "$bin_dir/cc" ] && head -1 "$bin_dir/cc" | grep -q "bash"; then
-        rm -f "$bin_dir/cc"
+    if [ -f "$BIN_DIR/cc" ] && head -1 "$BIN_DIR/cc" | grep -q "bash"; then
+        rm -f "$BIN_DIR/cc"
         echo "✓ Removed old 'cc' command (now use 'ccc')"
     fi
 
@@ -1676,6 +1735,8 @@ skip_perm=false
 only_env=false
 model_index=""
 claude_args=()
+
+migrate_legacy_layout
 
 while [ $# -gt 0 ]; do
     case $1 in

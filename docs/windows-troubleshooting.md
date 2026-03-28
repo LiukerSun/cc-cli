@@ -80,13 +80,13 @@ Get-Command codex -ErrorAction SilentlyContinue
 配置文件路径：
 
 ```text
-$env:USERPROFILE\.cc-config.json
+$env:USERPROFILE\.ccc\config.json
 ```
 
 ### 快速检查
 
 ```powershell
-Get-Content $env:USERPROFILE\.cc-config.json -Raw | ConvertFrom-Json
+Get-Content $env:USERPROFILE\.ccc\config.json -Raw | ConvertFrom-Json
 ```
 
 如果报错，通常是：
@@ -100,7 +100,7 @@ Get-Content $env:USERPROFILE\.cc-config.json -Raw | ConvertFrom-Json
 先备份旧文件：
 
 ```powershell
-Copy-Item $env:USERPROFILE\.cc-config.json $env:USERPROFILE\.cc-config.json.backup -ErrorAction SilentlyContinue
+Copy-Item $env:USERPROFILE\.ccc\config.json $env:USERPROFILE\.ccc\config.json.backup -ErrorAction SilentlyContinue
 ```
 
 然后直接用：
@@ -112,7 +112,7 @@ ccc --edit
 或重新创建：
 
 ```powershell
-Set-Content -Path $env:USERPROFILE\.cc-config.json -Value "[]" -Encoding utf8
+Set-Content -Path $env:USERPROFILE\.ccc\config.json -Value "[]" -Encoding utf8
 ccc --add
 ```
 
@@ -168,6 +168,6 @@ irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 如果只想重建配置文件：
 
 ```powershell
-Remove-Item $env:USERPROFILE\.cc-config.json -Force
+Remove-Item $env:USERPROFILE\.ccc\config.json -Force
 ccc --add
 ```

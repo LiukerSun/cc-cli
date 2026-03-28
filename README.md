@@ -32,6 +32,7 @@
 - ⚡ **轻依赖** - 核心 Bash 脚本无额外依赖；安装器和 CLI 自动补装依赖 Node.js / npm
 - 🔄 **Bypass 模式** - 支持 `CLAUDE_SKIP_PERMISSIONS`
 - 📦 **配置持久化** - 自动保存和恢复上次选择
+- 🗂️ **统一目录布局** - `ccc` 自身配置和安装文件统一收拢到 `~/.ccc/`
 - 🤖 **Team / Codex 配置同步** - 启动 Claude 时自动同步 `~/.claude/settings.json`；启动 Codex 时自动同步 `~/.codex/config.toml` 和 `~/.codex/auth.json`
 - 🔀 **多提供商支持** - 支持 Anthropic 兼容提供商、智谱 AI、阿里云百炼（Coding Plan）和 OpenAI Codex
 - 📡 **自动获取模型** - Claude-compatible provider 支持从 API 获取模型列表；Codex 支持内置官方模型列表
@@ -299,8 +300,10 @@ Model 'Codex (gpt-5.4)' added successfully!
 ### 配置文件位置
 
 ```
-~/.cc-config.json
+~/.ccc/config.json
 ```
+
+升级到新版本后，如果检测到旧的 `~/.cc-config.json` / `~/.cc-cli/`，`ccc` 会自动迁移到 `~/.ccc/`。
 
 ### 配置格式
 
@@ -458,7 +461,7 @@ ccc 3 -- --version --verbose
 ccc -e 2
 
 # 然后手动启动
-source /tmp/cc-model-env.sh
+source ~/.ccc/tmp/cc-model-env.sh
 claude
 ```
 
@@ -487,14 +490,14 @@ npm install -g @openai/codex
 **2. 配置文件损坏**
 ```bash
 # 备份并重新创建
-cp ~/.cc-config.json ~/.cc-config.json.backup
+cp ~/.ccc/config.json ~/.ccc/config.json.backup
 ccc --add
 ```
 
 **3. 权限问题**
 ```bash
 # 确保安装目录权限
-chmod 755 ~/.cc-cli
+chmod 755 ~/.ccc
 chmod +x ~/bin/ccc
 ```
 

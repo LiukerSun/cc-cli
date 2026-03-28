@@ -22,9 +22,34 @@ fi
 REPO_URL="https://github.com/LiukerSun/cc-cli"
 
 # Installation paths
-INSTALL_DIR="$HOME/.cc-cli"
+INSTALL_DIR="$HOME/.ccc"
+LEGACY_INSTALL_DIR="$HOME/.cc-cli"
 BIN_DIR="$HOME/bin"
-CONFIG_FILE="$HOME/.cc-config.json"
+CCC_BIN_DIR="$INSTALL_DIR/bin"
+CONFIG_FILE="$INSTALL_DIR/config.json"
+LEGACY_CONFIG_FILE="$HOME/.cc-config.json"
+ENV_FILE="$INSTALL_DIR/tmp/cc-model-env.sh"
+
+ensure_ccc_directories() {
+    mkdir -p "$INSTALL_DIR" "$CCC_BIN_DIR" "$INSTALL_DIR/tmp" "$BIN_DIR"
+}
+
+install_launcher() {
+    rm -f "$BIN_DIR/ccc"
+    if ! ln -s "$CCC_BIN_DIR/ccc" "$BIN_DIR/ccc" 2>/dev/null; then
+        cp "$CCC_BIN_DIR/ccc" "$BIN_DIR/ccc"
+        chmod +x "$BIN_DIR/ccc"
+    fi
+}
+
+migrate_legacy_paths() {
+    ensure_ccc_directories
+
+    if [ ! -f "$CONFIG_FILE" ] && [ -f "$LEGACY_CONFIG_FILE" ]; then
+        mv "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+        echo -e "${GREEN}✓ Migrated legacy config to $CONFIG_FILE${NC}"
+    fi
+}
 
 get_cli_package_name() {
     local command_name="$1"
@@ -237,10 +262,10 @@ check_requirements() {
 create_directories() {
     echo -e "${YELLOW}Creating directories...${NC}"
     
-    mkdir -p "$INSTALL_DIR"
-    mkdir -p "$BIN_DIR"
+    ensure_ccc_directories
     
     echo -e "${GREEN}✓ Created $INSTALL_DIR${NC}"
+    echo -e "${GREEN}✓ Created $CCC_BIN_DIR${NC}"
     echo -e "${GREEN}✓ Created $BIN_DIR${NC}"
     echo ""
 }
@@ -252,22 +277,24 @@ install_script() {
     # Download or copy the script
     if [ -f "./bin/ccc" ]; then
         # Local installation
-        cp ./bin/ccc "$BIN_DIR/ccc"
+        cp ./bin/ccc "$CCC_BIN_DIR/ccc"
         cp ./install.sh "$INSTALL_DIR/install.sh"
         if [ -f "./VERSION" ]; then
             cp ./VERSION "$INSTALL_DIR/VERSION"
         fi
     else
         # Remote installation
-        curl -fsSL "$REPO_URL/raw/main/bin/ccc" -o "$BIN_DIR/ccc"
+        curl -fsSL "$REPO_URL/raw/main/bin/ccc" -o "$CCC_BIN_DIR/ccc"
         curl -fsSL "$REPO_URL/raw/main/install.sh" -o "$INSTALL_DIR/install.sh"
         curl -fsSL "$REPO_URL/raw/main/VERSION" -o "$INSTALL_DIR/VERSION"
     fi
     
-    chmod +x "$BIN_DIR/ccc"
+    chmod +x "$CCC_BIN_DIR/ccc"
     chmod +x "$INSTALL_DIR/install.sh"
+    install_launcher
     
-    echo -e "${GREEN}✓ Installed ccc to $BIN_DIR/ccc${NC}"
+    echo -e "${GREEN}✓ Installed ccc to $CCC_BIN_DIR/ccc${NC}"
+    echo -e "${GREEN}✓ Linked launcher at $BIN_DIR/ccc${NC}"
     echo -e "${GREEN}✓ Installed uninstall script to $INSTALL_DIR/install.sh${NC}"
 
     # Migrate from old 'cc' command name
@@ -388,7 +415,7 @@ uninstall() {
     echo -e "${YELLOW}Removing files...${NC}"
     
     # Remove main script
-    if [ -f "$BIN_DIR/ccc" ]; then
+    if [ -f "$BIN_DIR/ccc" ] || [ -L "$BIN_DIR/ccc" ]; then
         rm -f "$BIN_DIR/ccc"
         echo -e "${GREEN}✓ Removed $BIN_DIR/ccc${NC}"
     else
@@ -402,22 +429,40 @@ uninstall() {
     else
         echo -e "${YELLOW}✗ Installation directory not found: $INSTALL_DIR${NC}"
     fi
+
+    if [ -d "$LEGACY_INSTALL_DIR" ]; then
+        rm -rf "$LEGACY_INSTALL_DIR"
+        echo -e "${GREEN}✓ Removed legacy directory $LEGACY_INSTALL_DIR${NC}"
+    fi
     
     # Remove temp env file
-    ENV_FILE="/tmp/cc-model-env.sh"
     if [ -f "$ENV_FILE" ]; then
         rm -f "$ENV_FILE"
         echo -e "${GREEN}✓ Removed $ENV_FILE${NC}"
+    fi
+
+    local legacy_env_file="/tmp/cc-model-env.sh"
+    if [ -f "$legacy_env_file" ]; then
+        rm -f "$legacy_env_file"
+        echo -e "${GREEN}✓ Removed $legacy_env_file${NC}"
     fi
     
     # Remove config file (optional)
     echo ""
     read -p "Delete config file? (y/N): " config_confirm
     if [[ "$config_confirm" =~ ^[Yy](es)?$ ]]; then
+        local removed_config=false
         if [ -f "$CONFIG_FILE" ]; then
             rm -f "$CONFIG_FILE"
             echo -e "${GREEN}✓ Removed $CONFIG_FILE${NC}"
-        else
+            removed_config=true
+        fi
+        if [ -f "$LEGACY_CONFIG_FILE" ]; then
+            rm -f "$LEGACY_CONFIG_FILE"
+            echo -e "${GREEN}✓ Removed legacy config $LEGACY_CONFIG_FILE${NC}"
+            removed_config=true
+        fi
+        if [ "$removed_config" = false ]; then
             echo -e "${YELLOW}✗ Config file not found: $CONFIG_FILE${NC}"
         fi
     else
@@ -496,6 +541,7 @@ esac
 # Run installation
 check_requirements
 create_directories
+migrate_legacy_paths
 install_script
 create_config
 update_shell

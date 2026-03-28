@@ -66,7 +66,7 @@ ccc -y 2
 
 ```bash
 ccc --env 2
-source /tmp/cc-model-env.sh
+source ~/.ccc/tmp/cc-model-env.sh
 ```
 
 如果模型配置的 `command` 是 `claude`，之后通常手动运行：

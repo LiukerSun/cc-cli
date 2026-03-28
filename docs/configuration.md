@@ -5,10 +5,11 @@
 CC-CLI 的配置文件位于：
 
 ```text
-~/.cc-config.json
+~/.ccc/config.json
 ```
 
 配置文件是一个 JSON 数组；每个对象代表一个可选模型。
+如果本地还存在旧版路径 `~/.cc-config.json` / `~/.cc-cli/`，新版 `ccc` 会在首次运行时自动迁移到 `~/.ccc/`。
 
 ## 配置结构
 
@@ -88,7 +89,7 @@ ccc --edit
 ### 方法 3：手动编辑
 
 ```bash
-nano ~/.cc-config.json
+nano ~/.ccc/config.json
 ```
 
 ## 示例配置
@@ -187,8 +188,8 @@ ccc --validate
 
 ## 安全建议
 
-- 不要把 `~/.cc-config.json` 提交到公开仓库
-- 建议把 `.cc-config.json` 加入你的项目 `.gitignore`
+- 不要把 `~/.ccc/config.json` 提交到公开仓库
+- 建议把 `.ccc/` 加入你的项目 `.gitignore`
 - 如果需要使用 GUI 编辑器，可以设置环境变量 `EDITOR`
 
 例如：
@@ -220,14 +221,14 @@ npm install -g @openai/codex
 ### 配置文件损坏
 
 ```bash
-cp ~/.cc-config.json ~/.cc-config.json.backup
+cp ~/.ccc/config.json ~/.ccc/config.json.backup
 ccc --add
 ```
 
 ### 权限问题
 
 ```bash
-chmod 755 ~/.cc-cli
+chmod 755 ~/.ccc
 chmod +x ~/bin/ccc
 ```
 

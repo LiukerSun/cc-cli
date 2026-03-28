@@ -5,9 +5,9 @@
 # Configuration
 .cc-config.json
 .cc-cli/
+.ccc/
 
 # Temporary files
-/tmp/cc-model-env.sh
 *.tmp
 *.bak
 
