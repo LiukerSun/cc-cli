@@ -46,16 +46,16 @@ func TestResolveLayoutLinuxRespectsXDG(t *testing.T) {
 		t.Fatalf("ResolveLayout returned error: %v", err)
 	}
 
-	if got, want := layout.ConfigDir, "/xdg/config/ccc"; got != want {
+	if got, want := layout.ConfigDir, filepath.Join("/xdg/config", "ccc"); got != want {
 		t.Fatalf("ConfigDir = %q, want %q", got, want)
 	}
-	if got, want := layout.DataDir, "/xdg/data/ccc"; got != want {
+	if got, want := layout.DataDir, filepath.Join("/xdg/data", "ccc"); got != want {
 		t.Fatalf("DataDir = %q, want %q", got, want)
 	}
-	if got, want := layout.CacheDir, "/xdg/cache/ccc"; got != want {
+	if got, want := layout.CacheDir, filepath.Join("/xdg/cache", "ccc"); got != want {
 		t.Fatalf("CacheDir = %q, want %q", got, want)
 	}
-	if got, want := layout.StateDir, "/xdg/state/ccc"; got != want {
+	if got, want := layout.StateDir, filepath.Join("/xdg/state", "ccc"); got != want {
 		t.Fatalf("StateDir = %q, want %q", got, want)
 	}
 }

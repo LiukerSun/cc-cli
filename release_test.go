@@ -15,7 +15,8 @@ func TestReleaseAssetsStayAligned(t *testing.T) {
 	installPs1 := readFile(t, filepath.Join(root, "install.ps1"))
 
 	assertContains(t, goreleaser, "project_name: ccc")
-	assertContains(t, goreleaser, "name_template: >-\n      ccc_{{ .Os }}_{{ .Arch }}")
+	assertContains(t, goreleaser, "name_template: >-")
+	assertContains(t, goreleaser, "ccc_{{ .Os }}_{{ .Arch }}")
 	assertContains(t, goreleaser, "goos: windows")
 	assertContains(t, goreleaser, "format: zip")
 	assertContains(t, goreleaser, "name_template: checksums.txt")

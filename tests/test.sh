@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+trap 'chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
 
 HOME_DIR="$TMP_DIR/home"
 BIN_DIR="$HOME_DIR/.local/bin"
@@ -13,15 +13,15 @@ CCC_BIN="$BIN_DIR/ccc"
 
 mkdir -p "$BIN_DIR"
 
+export HOME="$HOME_DIR"
+export PATH="$BIN_DIR:/usr/bin:/bin"
+export GOCACHE="$TMP_DIR/go-cache"
+export GOMODCACHE="$TMP_DIR/go-mod-cache"
+
 (
     cd "$REPO_DIR"
-    HOME="$HOME_DIR" \
-    GOCACHE="$TMP_DIR/go-cache" \
     go build -o "$CCC_BIN" ./cmd/ccc
 )
-
-HOME="$HOME_DIR"
-PATH="$BIN_DIR:/usr/bin:/bin"
 
 if ! "$CCC_BIN" help | grep -q "ccc profile add"; then
     echo "expected help output to include profile commands" >&2

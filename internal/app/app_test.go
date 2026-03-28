@@ -2,19 +2,82 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/LiukerSun/cc-cli/internal/config"
 )
 
-func TestProfileAddAndList(t *testing.T) {
+func setupTestHome(t *testing.T) string {
+	t.Helper()
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	return home
+}
+
+func prependTestPath(t *testing.T, dirs ...string) {
+	t.Helper()
+	t.Setenv("PATH", strings.Join(dirs, string(os.PathListSeparator)))
+}
+
+func writeTestCommand(t *testing.T, dir, name, unixContent, windowsContent string) string {
+	t.Helper()
+
+	fileName := name
+	content := unixContent
+	mode := os.FileMode(0o755)
+	if runtime.GOOS == "windows" {
+		fileName += ".cmd"
+		content = windowsContent
+		mode = 0o644
+	}
+
+	path := filepath.Join(dir, fileName)
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		t.Fatalf("WriteFile %s: %v", path, err)
+	}
+	return path
+}
+
+func decodeProfileList(t *testing.T, output string) []config.Profile {
+	t.Helper()
+
+	var payload struct {
+		Profiles []config.Profile `json:"profiles"`
+	}
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("decode profile list: %v\noutput: %s", err, output)
+	}
+	return payload.Profiles
+}
+
+func findProfileByID(t *testing.T, profiles []config.Profile, id string) config.Profile {
+	t.Helper()
+
+	for _, profile := range profiles {
+		if profile.ID == id {
+			return profile
+		}
+	}
+	t.Fatalf("profile %q not found in payload: %+v", id, profiles)
+	return config.Profile{}
+}
+
+func TestProfileAddAndList(t *testing.T) {
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -46,12 +109,7 @@ func TestProfileAddAndList(t *testing.T) {
 }
 
 func TestProfileAddAppliesPresetDefaults(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -91,12 +149,7 @@ func TestProfileAddAppliesPresetDefaults(t *testing.T) {
 }
 
 func TestProfileAddRejectsUnknownPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -115,12 +168,7 @@ func TestProfileAddRejectsUnknownPreset(t *testing.T) {
 }
 
 func TestProfileUpdateChangesPresetModelAndEnv(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -152,31 +200,26 @@ func TestProfileUpdateChangesPresetModelAndEnv(t *testing.T) {
 	if exitCode := Run([]string{"profile", "list", "--json"}, &stdout, &stderr); exitCode != 0 {
 		t.Fatalf("profile list exitCode = %d, stderr = %s", exitCode, stderr.String())
 	}
-	output := stdout.String()
-	if !strings.Contains(output, `"provider": "zhipu"`) {
-		t.Fatalf("updated profile missing provider: %s", output)
+	profile := findProfileByID(t, decodeProfileList(t, stdout.String()), "relay")
+	if profile.Provider != "zhipu" {
+		t.Fatalf("updated profile provider = %q, want zhipu", profile.Provider)
 	}
-	if !strings.Contains(output, `"command": "claude"`) {
-		t.Fatalf("updated profile missing command: %s", output)
+	if profile.Command != "claude" {
+		t.Fatalf("updated profile command = %q, want claude", profile.Command)
 	}
-	if !strings.Contains(output, `"model": "glm-4.7-air"`) {
-		t.Fatalf("updated profile missing model override: %s", output)
+	if profile.Model != "glm-4.7-air" {
+		t.Fatalf("updated profile model = %q, want glm-4.7-air", profile.Model)
 	}
-	if !strings.Contains(output, `"FOO": "bar"`) {
-		t.Fatalf("updated profile missing env override: %s", output)
+	if profile.ExtraEnv["FOO"] != "bar" {
+		t.Fatalf("updated profile env missing FOO=bar: %+v", profile.ExtraEnv)
 	}
-	if strings.Contains(output, `"sync_external": true`) {
-		t.Fatalf("updated profile should disable sync: %s", output)
+	if profile.SyncExternal {
+		t.Fatalf("updated profile should disable sync: %+v", profile)
 	}
 }
 
 func TestProfileUpdateRenamesCurrentProfileID(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -215,8 +258,7 @@ func TestProfileUpdateRenamesCurrentProfileID(t *testing.T) {
 }
 
 func TestConfigShowReadsLegacyConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setupTestHome(t)
 	legacyPath := filepath.Join(home, ".ccc", "config.json")
 	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -250,12 +292,7 @@ func TestConfigShowReadsLegacyConfig(t *testing.T) {
 }
 
 func TestProfileUseAndCurrent(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -288,12 +325,7 @@ func TestProfileUseAndCurrent(t *testing.T) {
 }
 
 func TestConfigMigrateWritesCurrentConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	home := setupTestHome(t)
 
 	legacyPath := filepath.Join(home, ".ccc", "config.json")
 	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
@@ -326,12 +358,7 @@ func TestConfigMigrateWritesCurrentConfig(t *testing.T) {
 }
 
 func TestRunDryRunUsesCurrentProfile(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -366,26 +393,22 @@ func TestRunDryRunUsesCurrentProfile(t *testing.T) {
 }
 
 func TestRunExecutesTargetCommand(t *testing.T) {
-	home := t.TempDir()
+	home := setupTestHome(t)
 	binDir := filepath.Join(home, "bin")
-	t.Setenv("HOME", home)
-	t.Setenv("PATH", binDir+":/usr/bin:/bin")
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	prependTestPath(t, binDir)
 
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll binDir: %v", err)
 	}
-	scriptPath := filepath.Join(binDir, "codex")
 	script := "#!/bin/sh\n" +
 		"printf 'cmd:%s\\n' \"$0\"\n" +
 		"printf 'model:%s\\n' \"$OPENAI_MODEL\"\n" +
 		"printf 'arg1:%s\\n' \"$1\"\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("WriteFile script: %v", err)
-	}
+	scriptWin := "@echo off\r\n" +
+		"echo cmd:%~f0\r\n" +
+		"echo model:%OPENAI_MODEL%\r\n" +
+		"echo arg1:%~1\r\n"
+	writeTestCommand(t, binDir, "codex", script, scriptWin)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -423,28 +446,21 @@ func TestRunExecutesTargetCommand(t *testing.T) {
 }
 
 func TestDoctorInspectsInstalledTools(t *testing.T) {
-	home := t.TempDir()
+	home := setupTestHome(t)
 	binDir := filepath.Join(home, "bin")
-	t.Setenv("HOME", home)
-	t.Setenv("PATH", binDir+":/usr/bin:/bin")
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	prependTestPath(t, binDir)
 
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll binDir: %v", err)
 	}
-	tools := map[string]string{
-		"node":   "#!/bin/sh\necho v20.11.0\n",
-		"npm":    "#!/bin/sh\necho 10.8.0\n",
-		"codex":  "#!/bin/sh\necho codex 0.1.0\n",
-		"claude": "#!/bin/sh\necho claude 0.1.0\n",
+	tools := map[string][2]string{
+		"node":   {"#!/bin/sh\necho v20.11.0\n", "@echo off\r\necho v20.11.0\r\n"},
+		"npm":    {"#!/bin/sh\necho 10.8.0\n", "@echo off\r\necho 10.8.0\r\n"},
+		"codex":  {"#!/bin/sh\necho codex 0.1.0\n", "@echo off\r\necho codex 0.1.0\r\n"},
+		"claude": {"#!/bin/sh\necho claude 0.1.0\n", "@echo off\r\necho claude 0.1.0\r\n"},
 	}
 	for name, content := range tools {
-		if err := os.WriteFile(filepath.Join(binDir, name), []byte(content), 0o755); err != nil {
-			t.Fatalf("WriteFile %s: %v", name, err)
-		}
+		writeTestCommand(t, binDir, name, content[0], content[1])
 	}
 
 	var stdout bytes.Buffer
@@ -476,16 +492,11 @@ func TestDoctorInspectsInstalledTools(t *testing.T) {
 }
 
 func TestRunAutoInstallsMissingCLI(t *testing.T) {
-	home := t.TempDir()
+	home := setupTestHome(t)
 	binDir := filepath.Join(home, "bin")
 	npmPrefix := filepath.Join(home, ".npm-global")
 	npmBinDir := filepath.Join(npmPrefix, "bin")
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
-	t.Setenv("PATH", binDir+":/usr/bin:/bin")
+	prependTestPath(t, binDir)
 
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll binDir: %v", err)
@@ -498,15 +509,30 @@ func TestRunAutoInstallsMissingCLI(t *testing.T) {
 	npmScript := "#!/bin/sh\n" +
 		"if [ \"$1\" = \"--version\" ]; then echo 10.8.0; exit 0; fi\n" +
 		"if [ \"$1\" = \"config\" ] && [ \"$2\" = \"get\" ] && [ \"$3\" = \"prefix\" ]; then echo \"" + npmPrefix + "\"; exit 0; fi\n" +
-		"if [ \"$1\" = \"install\" ] && [ \"$2\" = \"-g\" ] && [ \"$3\" = \"@openai/codex\" ]; then printf '#!/bin/sh\\necho auto-installed-codex\\n' > \"" + filepath.Join(npmBinDir, "codex") + "\"; chmod +x \"" + filepath.Join(npmBinDir, "codex") + "\"; exit 0; fi\n" +
+		"if [ \"$1\" = \"install\" ] && [ \"$2\" = \"-g\" ] && [ \"$3\" = \"@openai/codex\" ]; then printf '#!/bin/sh\\necho auto-installed-codex\\n' > \"" + filepath.Join(npmBinDir, "codex") + "\"; /bin/chmod +x \"" + filepath.Join(npmBinDir, "codex") + "\"; exit 0; fi\n" +
 		"echo unexpected npm args: \"$@\" >&2\n" +
 		"exit 1\n"
-	if err := os.WriteFile(filepath.Join(binDir, "node"), []byte(nodeScript), 0o755); err != nil {
-		t.Fatalf("WriteFile node: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(binDir, "npm"), []byte(npmScript), 0o755); err != nil {
-		t.Fatalf("WriteFile npm: %v", err)
-	}
+	nodeScriptWin := "@echo off\r\necho v20.11.0\r\n"
+	npmScriptWin := "@echo off\r\n" +
+		"if \"%~1\"==\"--version\" (\r\n" +
+		"  echo 10.8.0\r\n" +
+		"  exit /b 0\r\n" +
+		")\r\n" +
+		"if \"%~1\"==\"config\" if \"%~2\"==\"get\" if \"%~3\"==\"prefix\" (\r\n" +
+		"  echo " + npmPrefix + "\r\n" +
+		"  exit /b 0\r\n" +
+		")\r\n" +
+		"if \"%~1\"==\"install\" if \"%~2\"==\"-g\" if \"%~3\"==\"@openai/codex\" (\r\n" +
+		"  > \"" + filepath.Join(npmBinDir, "codex.cmd") + "\" (\r\n" +
+		"    echo @echo off\r\n" +
+		"    echo echo auto-installed-codex\r\n" +
+		"  )\r\n" +
+		"  exit /b 0\r\n" +
+		")\r\n" +
+		"echo unexpected npm args: %* 1>&2\r\n" +
+		"exit /b 1\r\n"
+	writeTestCommand(t, binDir, "node", nodeScript, nodeScriptWin)
+	writeTestCommand(t, binDir, "npm", npmScript, npmScriptWin)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -537,12 +563,7 @@ func TestRunAutoInstallsMissingCLI(t *testing.T) {
 }
 
 func TestSyncDryRunShowsTargets(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -562,18 +583,13 @@ func TestSyncDryRunShowsTargets(t *testing.T) {
 	if exitCode := Run([]string{"sync", "--dry-run"}, &stdout, &stderr); exitCode != 0 {
 		t.Fatalf("sync --dry-run exitCode = %d, stderr = %s", exitCode, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), ".claude/settings.json") {
+	if !strings.Contains(stdout.String(), filepath.Join(".claude", "settings.json")) {
 		t.Fatalf("sync dry-run missing target path: %s", stdout.String())
 	}
 }
 
 func TestSyncWritesClaudeSettings(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	home := setupTestHome(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -606,12 +622,7 @@ func TestSyncWritesClaudeSettings(t *testing.T) {
 }
 
 func TestUpgradeDryRunShowsResolvedTarget(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	setupTestHome(t)
 	t.Setenv("CCC_RELEASE_DOWNLOAD_BASE_URL", "https://example.com/releases/download")
 
 	var stdout bytes.Buffer
@@ -624,7 +635,11 @@ func TestUpgradeDryRunShowsResolvedTarget(t *testing.T) {
 	if !strings.Contains(output, "Target version: 2.2.1") {
 		t.Fatalf("upgrade --dry-run output missing target version: %s", output)
 	}
-	if !strings.Contains(output, "ccc_linux_amd64.tar.gz") && !strings.Contains(output, "ccc_darwin_amd64.tar.gz") && !strings.Contains(output, "ccc_darwin_arm64.tar.gz") && !strings.Contains(output, "ccc_linux_arm64.tar.gz") {
+	expectedAsset := fmt.Sprintf("ccc_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		expectedAsset = fmt.Sprintf("ccc_%s_%s.zip", runtime.GOOS, runtime.GOARCH)
+	}
+	if !strings.Contains(output, expectedAsset) {
 		t.Fatalf("upgrade --dry-run output missing asset name: %s", output)
 	}
 }
