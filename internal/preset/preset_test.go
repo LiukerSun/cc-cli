@@ -81,3 +81,21 @@ func TestLookupReturnsDefinition(t *testing.T) {
 		t.Fatalf("BaseURL = %q", definition.BaseURL)
 	}
 }
+
+func TestLookupSupportsAliases(t *testing.T) {
+	definition, err := Lookup("qwen")
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if definition.Provider != "alibaba" {
+		t.Fatalf("Provider = %q", definition.Provider)
+	}
+
+	definition, err = Lookup("codex")
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if definition.Command != "codex" {
+		t.Fatalf("Command = %q", definition.Command)
+	}
+}

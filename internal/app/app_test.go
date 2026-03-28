@@ -77,6 +77,23 @@ func findProfileByID(t *testing.T, profiles []config.Profile, id string) config.
 	return config.Profile{}
 }
 
+func stubInteractiveModelFetchers(t *testing.T, zhipuModels, alibabaModels []string) {
+	t.Helper()
+
+	previousZhipu := fetchZhipuModels
+	previousAlibaba := fetchAlibabaModels
+	fetchZhipuModels = func(string) ([]string, error) {
+		return append([]string(nil), zhipuModels...), nil
+	}
+	fetchAlibabaModels = func(string) ([]string, error) {
+		return append([]string(nil), alibabaModels...), nil
+	}
+	t.Cleanup(func() {
+		fetchZhipuModels = previousZhipu
+		fetchAlibabaModels = previousAlibaba
+	})
+}
+
 func TestProfileAddAndList(t *testing.T) {
 	setupTestHome(t)
 
@@ -144,6 +161,136 @@ func TestTopLevelAddUsesPositionalPresetShortcut(t *testing.T) {
 	}
 }
 
+func TestTopLevelAddInteractiveZhipu(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+
+	stubInteractiveModelFetchers(t, []string{"glm-5", "glm-4.7"}, interactiveAlibabaFallbackModels)
+
+	store := config.NewStore(home, layout)
+	input := strings.NewReader("1\nzhipu-test-key\n2\n1\n\n")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runAddInteractive(input, &stdout, &stderr, store, addProfileOptions{})
+	if exitCode != 0 {
+		t.Fatalf("runAddInteractive exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	cfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+
+	profile, ok := cfg.FindProfile("zhipu-glm-4-7")
+	if !ok {
+		t.Fatalf("expected interactive add to create zhipu-glm-4-7 profile: %+v", cfg.Profiles)
+	}
+	if profile.Provider != "zhipu" {
+		t.Fatalf("Provider = %q, want zhipu", profile.Provider)
+	}
+	if profile.APIKey != "zhipu-test-key" {
+		t.Fatalf("APIKey = %q, want zhipu-test-key", profile.APIKey)
+	}
+	if profile.Model != "glm-4.7" {
+		t.Fatalf("Model = %q, want glm-4.7", profile.Model)
+	}
+	if profile.FastModel != "glm-5" {
+		t.Fatalf("FastModel = %q, want glm-5", profile.FastModel)
+	}
+	if profile.Name != "ZHIPU (glm-4.7)" {
+		t.Fatalf("Name = %q, want ZHIPU (glm-4.7)", profile.Name)
+	}
+}
+
+func TestTopLevelAddInteractiveAlibaba(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+
+	stubInteractiveModelFetchers(t, interactiveZhipuFallbackModels, []string{"qwen3.5-plus", "qwen3-coder-next"})
+
+	store := config.NewStore(home, layout)
+	input := strings.NewReader("2\nalibaba-test-key\n2\n\n\n")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runAddInteractive(input, &stdout, &stderr, store, addProfileOptions{})
+	if exitCode != 0 {
+		t.Fatalf("runAddInteractive exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	cfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+
+	profile, ok := cfg.FindProfile("alibaba-coding-plan-qwen3-coder-next")
+	if !ok {
+		t.Fatalf("expected interactive add to create alibaba coding plan profile: %+v", cfg.Profiles)
+	}
+	if profile.Provider != "alibaba" {
+		t.Fatalf("Provider = %q, want alibaba", profile.Provider)
+	}
+	if profile.APIKey != "alibaba-test-key" {
+		t.Fatalf("APIKey = %q, want alibaba-test-key", profile.APIKey)
+	}
+	if profile.Model != "qwen3-coder-next" {
+		t.Fatalf("Model = %q, want qwen3-coder-next", profile.Model)
+	}
+	if profile.FastModel != "qwen3-coder-next" {
+		t.Fatalf("FastModel = %q, want qwen3-coder-next", profile.FastModel)
+	}
+}
+
+func TestTopLevelAddInteractiveCodex(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+
+	store := config.NewStore(home, layout)
+	input := strings.NewReader("3\n\nsk-openai-test\n2\n\n")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runAddInteractive(input, &stdout, &stderr, store, addProfileOptions{})
+	if exitCode != 0 {
+		t.Fatalf("runAddInteractive exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	cfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+
+	profile, ok := cfg.FindProfile("codex-gpt-5-4-mini")
+	if !ok {
+		t.Fatalf("expected interactive add to create codex profile: %+v", cfg.Profiles)
+	}
+	if profile.Command != "codex" {
+		t.Fatalf("Command = %q, want codex", profile.Command)
+	}
+	if profile.BaseURL != "https://api.openai.com/v1" {
+		t.Fatalf("BaseURL = %q, want https://api.openai.com/v1", profile.BaseURL)
+	}
+	if profile.APIKey != "sk-openai-test" {
+		t.Fatalf("APIKey = %q, want sk-openai-test", profile.APIKey)
+	}
+	if profile.Model != "gpt-5.4-mini" {
+		t.Fatalf("Model = %q, want gpt-5.4-mini", profile.Model)
+	}
+	if profile.Name != "Codex (gpt-5.4-mini)" {
+		t.Fatalf("Name = %q, want Codex (gpt-5.4-mini)", profile.Name)
+	}
+}
+
 func TestProfileAddAppliesPresetDefaults(t *testing.T) {
 	setupTestHome(t)
 
@@ -180,6 +327,43 @@ func TestProfileAddAppliesPresetDefaults(t *testing.T) {
 		t.Fatalf("current output missing preset base url: %s", output)
 	}
 	if !strings.Contains(output, "Model: glm-5") {
+		t.Fatalf("current output missing preset model: %s", output)
+	}
+}
+
+func TestProfileAddAppliesAlibabaPresetDefaults(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "qwen",
+		"--api-key", "alibaba-test-key",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Run([]string{"current"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("current exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Name: Alibaba Coding Plan") {
+		t.Fatalf("current output missing preset name: %s", output)
+	}
+	if !strings.Contains(output, "Provider: alibaba") {
+		t.Fatalf("current output missing preset provider: %s", output)
+	}
+	if !strings.Contains(output, "Base URL: https://coding.dashscope.aliyuncs.com/apps/anthropic") {
+		t.Fatalf("current output missing preset base url: %s", output)
+	}
+	if !strings.Contains(output, "Model: qwen3.5-plus") {
 		t.Fatalf("current output missing preset model: %s", output)
 	}
 }

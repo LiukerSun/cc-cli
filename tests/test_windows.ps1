@@ -77,7 +77,7 @@ try {
     }
 
     $helpOutput = Invoke-Ccc -CommandArgs @("help") -FailureMessage "expected help to succeed"
-    Assert-Contains -Text $helpOutput -Needle "ccc add <preset> <api-key> [model]" -Message "expected help output to include add shortcut"
+    Assert-Contains -Text $helpOutput -Needle "ccc add [<preset> <api-key> [model]]" -Message "expected help output to include add shortcut"
 
     $profileAddOutput = Invoke-Ccc -CommandArgs @(
         "add", "anthropic", "test-key", "test-model",
@@ -123,7 +123,7 @@ try {
     }
 
     $wrapperText = $wrapperOutput | Out-String
-    Assert-Contains -Text $wrapperText -Needle "ccc add <preset> <api-key> [model]" -Message "expected wrapper output to come from Go CLI help"
+    Assert-Contains -Text $wrapperText -Needle "ccc add [<preset> <api-key> [model]]" -Message "expected wrapper output to come from Go CLI help"
     Assert-Contains -Text $wrapperText -Needle "legacy compatibility wrapper" -Message "expected wrapper to print a deprecation warning"
 } finally {
     $env:HOME = $previousHome

@@ -40,7 +40,7 @@ assert_contains() {
 )
 
 help_output="$("$CCC_BIN" help)"
-assert_contains "$help_output" "ccc add <preset> <api-key> [model]" "expected help output to include add shortcut"
+assert_contains "$help_output" "ccc add [<preset> <api-key> [model]]" "expected help output to include add shortcut"
 
 if ! "$CCC_BIN" add anthropic test-key test-model \
     --name "Claude Test" > "$TMP_DIR/profile-add.txt"; then
@@ -90,7 +90,7 @@ if ! HOME="$HOME_DIR" bash "$REPO_DIR/bin/ccc" help > "$TMP_DIR/wrapper-stdout.t
     exit 1
 fi
 
-if ! grep -q "ccc add <preset> <api-key> \[model\]" "$TMP_DIR/wrapper-stdout.txt"; then
+if ! grep -q "ccc add \[<preset> <api-key> \[model\]\]" "$TMP_DIR/wrapper-stdout.txt"; then
     echo "expected wrapper output to come from Go CLI help" >&2
     exit 1
 fi

@@ -1,17 +1,20 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/LiukerSun/cc-cli/internal/buildinfo"
 	"github.com/LiukerSun/cc-cli/internal/config"
@@ -28,6 +31,42 @@ type pathsReport struct {
 	Layout     platform.Layout  `json:"layout"`
 	ConfigFile string           `json:"config_file"`
 	Legacy     legacy.Detection `json:"legacy"`
+}
+
+var fetchZhipuModels = defaultFetchZhipuModels
+var fetchAlibabaModels = defaultFetchAlibabaModels
+
+var interactiveCodexModels = []string{
+	"gpt-5.4",
+	"gpt-5.4-mini",
+	"gpt-5.3-codex",
+	"gpt-5.3-codex-spark",
+	"gpt-5.2-codex",
+	"gpt-5.2",
+	"gpt-5.1-codex-max",
+	"gpt-5.1",
+	"gpt-5.1-codex",
+	"gpt-5",
+	"gpt-5-codex",
+	"gpt-5-codex-mini",
+}
+
+var interactiveZhipuFallbackModels = []string{
+	"glm-5",
+	"glm-4.7",
+	"glm-4.7-air",
+	"glm-4.7-airx",
+}
+
+var interactiveAlibabaFallbackModels = []string{
+	"qwen3.5-plus",
+	"qwen3-max-2026-01-23",
+	"qwen3-coder-next",
+	"qwen3-coder-plus",
+	"glm-5",
+	"glm-4.7",
+	"kimi-k2.5",
+	"minimax-m2.5",
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -274,12 +313,12 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc help")
 	fmt.Fprintln(w, "  ccc version")
 	fmt.Fprintln(w, "  ccc current")
-	fmt.Fprintln(w, "  ccc add <preset> <api-key> [model] [--name ...] [--id ...]")
+	fmt.Fprintln(w, "  ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]")
 	fmt.Fprintln(w, "  ccc run [profile-id-or-name] [--dry-run] [--env-only] [-y|--bypass] [-- cli-args...]")
 	fmt.Fprintln(w, "  ccc sync [profile-id-or-name] [--dry-run]")
 	fmt.Fprintln(w, "  ccc profile list [--json]")
-	fmt.Fprintln(w, "  ccc profile add [--name ...] [--preset anthropic|openai|zhipu] --api-key ...")
-	fmt.Fprintln(w, "  ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu] [--model ...]")
+	fmt.Fprintln(w, "  ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...")
+	fmt.Fprintln(w, "  ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba] [--model ...]")
 	fmt.Fprintln(w, "  ccc profile use <profile-id-or-name>")
 	fmt.Fprintln(w, "  ccc profile delete <profile-id-or-name>")
 	fmt.Fprintln(w, "  ccc paths [--json]")
@@ -424,11 +463,11 @@ func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc add <preset> <api-key> [model] [--name ...] [--id ...]")
+		fmt.Fprintln(stderr, "usage: ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]")
 		return 1
 	}
 	if len(positionalArgs) > 3 {
-		fmt.Fprintln(stderr, "usage: ccc add <preset> <api-key> [model] [--name ...] [--id ...]")
+		fmt.Fprintln(stderr, "usage: ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]")
 		return 1
 	}
 
@@ -443,6 +482,18 @@ func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 	}
 
 	store := config.NewStore(home, layout)
+	if len(positionalArgs) == 0 && strings.TrimSpace(*presetName) == "" && strings.TrimSpace(*apiKey) == "" {
+		return runAddInteractive(os.Stdin, stdout, stderr, store, addProfileOptions{
+			Name:      *name,
+			ID:        *id,
+			BaseURL:   *baseURL,
+			Model:     *model,
+			FastModel: *fastModel,
+			NoSync:    *noSync,
+			EnvVars:   envVars.values,
+		})
+	}
+
 	return addProfile(stdout, stderr, store, addProfileOptions{
 		Name:       *name,
 		ID:         *id,
@@ -470,6 +521,503 @@ type addProfileOptions struct {
 	FastModel  string
 	NoSync     bool
 	EnvVars    map[string]string
+}
+
+func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	fmt.Fprintln(stdout, "ccc add")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Interactive model configuration")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "  1) ZAI / ZHIPU AI")
+	fmt.Fprintln(stdout, "  2) Alibaba Coding Plan")
+	fmt.Fprintln(stdout, "  3) OpenAI Codex")
+	fmt.Fprintln(stdout, "  4) Manual input")
+
+	reader := bufio.NewReader(stdin)
+	choice, err := promptChoice(reader, stdout, "Choice", 4)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read provider choice: %v\n", err)
+		return 1
+	}
+
+	switch choice {
+	case 1:
+		return runAddZhipuInteractive(reader, stdout, stderr, store, initial)
+	case 2:
+		return runAddAlibabaInteractive(reader, stdout, stderr, store, initial)
+	case 3:
+		return runAddCodexInteractive(reader, stdout, stderr, store, initial)
+	case 4:
+		return runAddManualInteractive(reader, stdout, stderr, store, initial)
+	default:
+		fmt.Fprintf(stderr, "invalid choice %d\n", choice)
+		return 1
+	}
+}
+
+func runAddZhipuInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "ZAI / ZHIPU AI")
+
+	apiKey, err := promptRequired(reader, stdout, "API key")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
+		return 1
+	}
+
+	models, err := fetchZhipuModels(apiKey)
+	if err != nil {
+		fmt.Fprintf(stdout, "Failed to fetch ZAI model list, using built-in list: %v\n", err)
+		models = append([]string(nil), interactiveZhipuFallbackModels...)
+	}
+
+	mainModel, err := promptModelChoice(reader, stdout, "main", models, firstNonEmpty(initial.Model, "glm-5"), true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
+		return 1
+	}
+	fastModel, err := promptModelChoice(reader, stdout, "fast", models, firstNonEmpty(initial.FastModel, mainModel), true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
+		return 1
+	}
+
+	defaultName := firstNonEmpty(initial.Name, fmt.Sprintf("ZHIPU (%s)", mainModel))
+	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
+		return 1
+	}
+
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:       name,
+		ID:         initial.ID,
+		PresetName: "zhipu",
+		APIKey:     apiKey,
+		Model:      mainModel,
+		FastModel:  fastModel,
+		NoSync:     initial.NoSync,
+		EnvVars:    initial.EnvVars,
+	})
+}
+
+func runAddAlibabaInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Alibaba Coding Plan")
+
+	apiKey, err := promptRequired(reader, stdout, "API key")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
+		return 1
+	}
+
+	models, err := fetchAlibabaModels(apiKey)
+	if err != nil {
+		fmt.Fprintf(stdout, "Failed to fetch Alibaba model list, using built-in list: %v\n", err)
+		models = append([]string(nil), interactiveAlibabaFallbackModels...)
+	}
+
+	defaultMain := firstNonEmpty(initial.Model, interactiveAlibabaFallbackModels[0])
+	mainModel, err := promptModelChoice(reader, stdout, "main", models, defaultMain, true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
+		return 1
+	}
+	fastModel, err := promptModelChoice(reader, stdout, "fast", models, firstNonEmpty(initial.FastModel, mainModel), true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
+		return 1
+	}
+
+	defaultName := firstNonEmpty(initial.Name, fmt.Sprintf("Alibaba Coding Plan (%s)", mainModel))
+	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
+		return 1
+	}
+
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:       name,
+		ID:         initial.ID,
+		PresetName: "alibaba",
+		APIKey:     apiKey,
+		Model:      mainModel,
+		FastModel:  fastModel,
+		NoSync:     initial.NoSync,
+		EnvVars:    initial.EnvVars,
+	})
+}
+
+func runAddCodexInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "OpenAI Codex")
+
+	baseURL, err := promptWithDefault(reader, stdout, "API base URL", firstNonEmpty(initial.BaseURL, "https://api.openai.com/v1"))
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
+		return 1
+	}
+	apiKey, err := promptRequired(reader, stdout, "API key")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
+		return 1
+	}
+
+	mainModel, err := promptModelChoice(reader, stdout, "main", interactiveCodexModels, firstNonEmpty(initial.Model, "gpt-5.4"), true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read model: %v\n", err)
+		return 1
+	}
+
+	defaultName := firstNonEmpty(initial.Name, fmt.Sprintf("Codex (%s)", mainModel))
+	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
+		return 1
+	}
+
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:       name,
+		ID:         initial.ID,
+		PresetName: "openai",
+		BaseURL:    normalizeCodexBaseURL(baseURL),
+		APIKey:     apiKey,
+		Model:      mainModel,
+		FastModel:  mainModel,
+		NoSync:     initial.NoSync,
+		EnvVars:    initial.EnvVars,
+	})
+}
+
+func runAddManualInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Manual configuration")
+
+	name, err := promptRequired(reader, stdout, "Display name")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
+		return 1
+	}
+	command, err := promptWithDefault(reader, stdout, "Command", firstNonEmpty(initial.Command, "claude"))
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read command: %v\n", err)
+		return 1
+	}
+	command = strings.ToLower(strings.TrimSpace(command))
+	if command != "claude" && command != "codex" {
+		fmt.Fprintf(stderr, "unsupported command %q\n", command)
+		return 1
+	}
+
+	baseURL, err := promptRequired(reader, stdout, "API base URL")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
+		return 1
+	}
+	apiKey, err := promptRequired(reader, stdout, "API key")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
+		return 1
+	}
+	model, err := promptRequired(reader, stdout, "Main model")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
+		return 1
+	}
+
+	fastModel := ""
+	if command == "claude" {
+		fastModel, err = promptWithDefault(reader, stdout, "Fast model", firstNonEmpty(initial.FastModel, model))
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
+			return 1
+		}
+	}
+
+	if command == "codex" {
+		baseURL = normalizeCodexBaseURL(baseURL)
+	}
+
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:      name,
+		ID:        initial.ID,
+		Command:   command,
+		Provider:  firstNonEmpty(initial.Provider, "custom"),
+		BaseURL:   baseURL,
+		APIKey:    apiKey,
+		Model:     model,
+		FastModel: fastModel,
+		NoSync:    initial.NoSync,
+		EnvVars:   initial.EnvVars,
+	})
+}
+
+func promptRequired(reader *bufio.Reader, stdout io.Writer, label string) (string, error) {
+	for {
+		value, err := promptWithDefault(reader, stdout, label, "")
+		if err != nil {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value, nil
+		}
+		fmt.Fprintf(stdout, "%s is required.\n", label)
+	}
+}
+
+func promptWithDefault(reader *bufio.Reader, stdout io.Writer, label, defaultValue string) (string, error) {
+	if defaultValue != "" {
+		fmt.Fprintf(stdout, "%s [%s]: ", label, defaultValue)
+	} else {
+		fmt.Fprintf(stdout, "%s: ", label)
+	}
+
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	value := strings.TrimSpace(line)
+	if value == "" {
+		return defaultValue, nil
+	}
+	return value, nil
+}
+
+func promptChoice(reader *bufio.Reader, stdout io.Writer, label string, max int) (int, error) {
+	for {
+		value, err := promptRequired(reader, stdout, fmt.Sprintf("%s [1-%d]", label, max))
+		if err != nil {
+			return 0, err
+		}
+		var choice int
+		if _, err := fmt.Sscanf(value, "%d", &choice); err == nil && choice >= 1 && choice <= max {
+			return choice, nil
+		}
+		fmt.Fprintf(stdout, "Please enter a number between 1 and %d.\n", max)
+	}
+}
+
+func promptModelChoice(reader *bufio.Reader, stdout io.Writer, kind string, models []string, defaultValue string, allowCustom bool) (string, error) {
+	choices := uniqueStrings(models)
+	if allowCustom {
+		choices = append(choices, "Custom model ID")
+	}
+
+	fmt.Fprintf(stdout, "Available %s models:\n", kind)
+	for i, model := range choices {
+		fmt.Fprintf(stdout, "  %2d) %s\n", i+1, model)
+	}
+
+	if defaultValue != "" {
+		if idx := indexOf(choices, defaultValue); idx >= 0 {
+			value, err := promptWithDefault(reader, stdout, fmt.Sprintf("Select %s model [1-%d]", kind, len(choices)), fmt.Sprintf("%d", idx+1))
+			if err != nil {
+				return "", err
+			}
+			return resolveModelChoice(reader, stdout, choices, value, kind)
+		}
+		if allowCustom {
+			value, err := promptWithDefault(reader, stdout, fmt.Sprintf("Select %s model [1-%d]", kind, len(choices)), fmt.Sprintf("%d", len(choices)))
+			if err != nil {
+				return "", err
+			}
+			model, err := resolveModelChoice(reader, stdout, choices, value, kind)
+			if err != nil {
+				return "", err
+			}
+			if model == "Custom model ID" {
+				return promptRequired(reader, stdout, "Custom model ID")
+			}
+			return model, nil
+		}
+	}
+
+	for {
+		value, err := promptRequired(reader, stdout, fmt.Sprintf("Select %s model [1-%d]", kind, len(choices)))
+		if err != nil {
+			return "", err
+		}
+		model, err := resolveModelChoice(reader, stdout, choices, value, kind)
+		if err != nil {
+			fmt.Fprintln(stdout, err.Error())
+			continue
+		}
+		if model == "Custom model ID" {
+			return promptRequired(reader, stdout, "Custom model ID")
+		}
+		return model, nil
+	}
+}
+
+func resolveModelChoice(reader *bufio.Reader, stdout io.Writer, choices []string, value, kind string) (string, error) {
+	var choice int
+	if _, err := fmt.Sscanf(strings.TrimSpace(value), "%d", &choice); err != nil || choice < 1 || choice > len(choices) {
+		return "", fmt.Errorf("please enter a number between 1 and %d", len(choices))
+	}
+	model := choices[choice-1]
+	if model == "Custom model ID" {
+		customModel, err := promptRequired(reader, stdout, "Custom model ID")
+		if err != nil {
+			return "", err
+		}
+		return customModel, nil
+	}
+	_ = kind
+	return model, nil
+}
+
+func defaultFetchZhipuModels(apiKey string) ([]string, error) {
+	models, err := fetchModels("GET", "https://open.bigmodel.cn/api/paas/v4/models", apiKey, parseIDModelList)
+	if err != nil {
+		return nil, err
+	}
+	return uniqueStrings(append(models, interactiveZhipuFallbackModels...)), nil
+}
+
+func defaultFetchAlibabaModels(apiKey string) ([]string, error) {
+	models, err := fetchModels("GET", "https://dashscope.aliyuncs.com/api/v1/models", apiKey, parseAlibabaModelList)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]string, 0, len(models))
+	for _, model := range models {
+		normalized := strings.ToLower(strings.TrimSpace(model))
+		if strings.HasPrefix(normalized, "qwen") || strings.HasPrefix(normalized, "glm") || strings.HasPrefix(normalized, "kimi") || strings.HasPrefix(normalized, "minimax") {
+			filtered = append(filtered, model)
+		}
+	}
+	return uniqueStrings(append(filtered, interactiveAlibabaFallbackModels...)), nil
+}
+
+func fetchModels(method, url, apiKey string, parser func([]byte) ([]string, error)) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http %d", resp.StatusCode)
+	}
+	return parser(body)
+}
+
+func parseIDModelList(body []byte) ([]string, error) {
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		if strings.TrimSpace(item.ID) != "" {
+			models = append(models, item.ID)
+		}
+	}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models found")
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func parseAlibabaModelList(body []byte) ([]string, error) {
+	var payload struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Model string `json:"model"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		if strings.TrimSpace(item.Model) != "" {
+			models = append(models, item.Model)
+			continue
+		}
+		if strings.TrimSpace(item.ID) != "" {
+			models = append(models, item.ID)
+		}
+	}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models found")
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func normalizeCodexBaseURL(baseURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	switch {
+	case strings.HasSuffix(trimmed, "/v1"):
+		return trimmed
+	case strings.HasSuffix(trimmed, "/v1/models"):
+		return strings.TrimSuffix(trimmed, "/models")
+	case strings.HasSuffix(trimmed, "/models"):
+		return strings.TrimSuffix(trimmed, "/models") + "/v1"
+	case strings.HasSuffix(trimmed, "/responses"):
+		return strings.TrimSuffix(trimmed, "/responses") + "/v1"
+	case trimmed == "":
+		return "/v1"
+	default:
+		return trimmed + "/v1"
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func indexOf(values []string, target string) int {
+	for i, value := range values {
+		if value == target {
+			return i
+		}
+	}
+	return -1
 }
 
 func addProfile(stdout, stderr io.Writer, store config.Store, options addProfileOptions) int {
@@ -541,7 +1089,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu] --api-key ...")
+		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...")
 		return 1
 	}
 	return addProfile(stdout, stderr, store, addProfileOptions{
@@ -561,7 +1109,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 
 func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu] [--model ...]")
+		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba] [--model ...]")
 		return 1
 	}
 
@@ -593,7 +1141,7 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu] [--model ...]")
+		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba] [--model ...]")
 		return 1
 	}
 	if sync.set && noSync.set {

@@ -42,6 +42,28 @@ var definitions = map[string]Definition{
 		Model:     "glm-5",
 		FastModel: "glm-4.7",
 	},
+	"alibaba": {
+		Name:      "Alibaba Coding Plan",
+		Provider:  "alibaba",
+		Command:   "claude",
+		BaseURL:   "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+		Model:     "qwen3.5-plus",
+		FastModel: "qwen3.5-plus",
+	},
+}
+
+var aliases = map[string]string{
+	"claude":    "anthropic",
+	"codex":     "openai",
+	"gpt":       "openai",
+	"openai":    "openai",
+	"zai":       "zhipu",
+	"glm":       "zhipu",
+	"zhipu":     "zhipu",
+	"qwen":      "alibaba",
+	"dashscope": "alibaba",
+	"tongyi":    "alibaba",
+	"alibaba":   "alibaba",
 }
 
 func Apply(profile config.Profile, name string) (config.Profile, error) {
@@ -79,6 +101,9 @@ func Lookup(name string) (Definition, error) {
 	name = strings.TrimSpace(strings.ToLower(name))
 	if name == "" {
 		return Definition{}, nil
+	}
+	if aliased, ok := aliases[name]; ok {
+		name = aliased
 	}
 
 	definition, ok := definitions[name]
