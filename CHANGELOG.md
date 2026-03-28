@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-03-28
+
+### 修复
+- **发布流程修复** - Release workflow 改为直接下载官方 GoReleaser 二进制，不再依赖 `go install`，避免因 runner Go 版本低于 GoReleaser 构建要求而导致发布失败
+
 ## [2.4.0] - 2026-03-28
 
 ### 新增

@@ -7,6 +7,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  GORELEASER_VERSION: "v2.12.7"
 
 permissions:
   contents: write
@@ -42,9 +43,14 @@ jobs:
         run: bash tests/install_best_effort.sh
 
       - name: Install GoReleaser
-        run: go install github.com/goreleaser/goreleaser/v2@v2.12.7
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/goreleaser/goreleaser/releases/download/${GORELEASER_VERSION}/goreleaser_Linux_x86_64.tar.gz" -o /tmp/goreleaser.tar.gz
+          tar -xzf /tmp/goreleaser.tar.gz -C /tmp goreleaser
+          install -m 0755 /tmp/goreleaser "$HOME/.local/bin/goreleaser"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Publish release assets
-        run: "$(go env GOPATH)/bin/goreleaser release --clean"
+        run: goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
