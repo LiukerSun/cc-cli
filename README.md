@@ -1,21 +1,37 @@
 # cc-cli
 
-`ccc` 是一个面向终端用户的模型切换器。
+`ccc` 是一个给 `claude` / `codex` 用的命令行配置切换器。
 
-它解决的是一个很具体的问题：你已经装了 `claude` 或 `codex`，也有多套官方源、转发地址、不同模型和不同 API Key，但每次切换都要改环境变量、改本地配置、再重新执行命令，过程很碎。`ccc` 把这件事压缩成了“选一个 profile，然后直接开跑”。
+你可以把不同站点、不同 Token、不同模型保存成多个 profile，然后在终端里直接选择并运行，不用再手改环境变量，也不用来回改 `~/.claude` 或 `~/.codex`。
 
-适合的场景：
+如果你经常遇到下面这些情况，它就是为你写的：
 
-- 你在 `claude` 和 `codex` 之间来回切
-- 你同时用官方源和第三方 relay
-- 你希望把 `base_url`、`api_key`、`model`、`fast_model` 固化成多个 profile
-- 你不想每次手改 `~/.claude` 或 `~/.codex`
+- 同时用官方源和第三方 relay
+- 一个人手里有多套 API Key / 多个模型
+- 需要在 `claude` 和 `codex` 之间快速切换
+- 想把“切配置再运行”变成一次命令完成
 
 当前主实现已经是 Go 版本。仓库里的 `bin/ccc` 和 `bin/ccc.ps1` 只是兼容 wrapper，正式入口是安装后的 `ccc` 二进制。
 
-## 30 秒上手
+## 为什么更省事
 
-安装：
+`ccc` 把原本分散的几步合并成一个动作：
+
+- 选择 profile
+- 注入当前 profile 的模型、认证和附加环境变量
+- 按需同步到 `~/.claude` 或 `~/.codex`
+- 直接启动目标 CLI
+
+也就是说，你不用再自己记住：
+
+- 这次该切哪个 `base_url`
+- 这次该用哪个 `model` / `fast_model`
+- 当前 shell 里该设置哪些环境变量
+- `claude` 和 `codex` 的本地配置文件该怎么改
+
+## 三步开始
+
+### 1. 安装
 
 macOS / Linux:
 
@@ -29,51 +45,57 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 ```
 
-添加一个配置：
+默认安装路径：
+
+- Linux / macOS: `~/.local/bin/ccc`
+- Windows: `%LOCALAPPDATA%\Programs\ccc\bin\ccc.exe`
+
+### 2. 添加一个配置
 
 ```bash
 ccc add
 ```
 
-直接运行：
+你会进入交互式添加流程，当前内置入口有：
+
+1. `ZAI / ZHIPU AI`
+2. `Alibaba Coding Plan`
+3. `OpenAI Codex`
+4. `Manual input`
+
+### 3. 直接运行
 
 ```bash
 ccc
 ```
 
-默认行为：
+默认行为很简单：
 
 - 没有配置时，提示先执行 `ccc add`
 - 只有一个配置时，直接运行该 profile
 - 有多个配置时，在交互终端里打开选择器
 - 选中的 profile 会自动保存成当前 profile
 
-## 这个工具会帮你做什么
+## 核心功能
 
-`ccc` 运行一个 profile 时，通常会顺手做完这些事情：
+- 多 profile 管理：把不同站点、模型、Token 固化成独立配置
+- 一键切换并运行：`ccc` 直接进入选择和执行流程
+- 交互式选择器：支持方向键上 / 下，也支持 `j` / `k`
+- 快捷录入：保留 `ccc add openai sk-xxx [model]` 这类脚本友好写法
+- 自动同步外部配置：运行前写入 `~/.claude` 或 `~/.codex`
+- 自动检查依赖：缺少 `claude` / `codex` 时尝试自动安装
+- bypass 支持：需要时直接进入最宽松运行模式
 
-- 选择要执行的目标命令：`claude` 或 `codex`
-- 注入当前 profile 对应的模型和认证信息
-- 在需要时同步外部配置到 `~/.claude` 或 `~/.codex`
-- 目标 CLI 缺失时，先检查依赖并尝试自动安装
-- 需要时进入 bypass 模式
+## 常见使用方式
 
-你不需要再手动记住：
-
-- 这次应该切哪个 `base_url`
-- 这次要用哪个模型
-- 当前终端里该设置哪些环境变量
-- `codex` 和 `claude` 的本地配置文件各自该怎么改
-
-## 核心体验
-
-- `ccc` 直接进入运行流程
-- 默认支持交互式 profile 选择
-- 支持方向键上 / 下，也支持 `j` / `k`
-- `ccc add` 无参数进入交互式添加
-- 保留 `ccc add openai sk-xxx [model]` 这类快捷写法
-- 默认自动同步 `~/.claude` 或 `~/.codex`
-- 缺少 `claude` / `codex` 时会尝试自动安装
+```bash
+ccc
+ccc run codex-prod
+ccc run zhipu-main -- --help
+ccc run --dry-run
+ccc run --env-only
+ccc -y
+```
 
 ## 常用命令
 
