@@ -86,7 +86,9 @@ func profileEnv(profile config.Profile) map[string]string {
 
 	switch profile.Command {
 	case "codex":
-		env["OPENAI_BASE_URL"] = profile.BaseURL
+		if !profile.SyncExternal {
+			env["OPENAI_BASE_URL"] = profile.BaseURL
+		}
 		env["OPENAI_API_KEY"] = profile.APIKey
 		env["OPENAI_MODEL"] = profile.Model
 		env["OPENAI_SMALL_FAST_MODEL"] = firstNonEmpty(profile.FastModel, profile.Model)

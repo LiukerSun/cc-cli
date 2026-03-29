@@ -37,6 +37,35 @@ func TestBuildPlanUsesCurrentProfile(t *testing.T) {
 	if got := plan.Env["OPENAI_MODEL"]; got != "gpt-5.4" {
 		t.Fatalf("OPENAI_MODEL = %q, want gpt-5.4", got)
 	}
+	if _, ok := plan.Env["OPENAI_BASE_URL"]; ok {
+		t.Fatalf("OPENAI_BASE_URL should not be set when external sync is enabled")
+	}
+}
+
+func TestBuildPlanKeepsCodexBaseURLWithoutExternalSync(t *testing.T) {
+	cfg := config.File{
+		Version:        1,
+		CurrentProfile: "codex-relay",
+		Profiles: []config.Profile{
+			{
+				ID:           "codex-relay",
+				Name:         "Codex Relay",
+				Command:      "codex",
+				BaseURL:      "https://relay.example.com/v1",
+				APIKey:       "sk-test",
+				Model:        "gpt-5.4",
+				SyncExternal: false,
+			},
+		},
+	}
+
+	plan, err := BuildPlan(cfg, "", nil, false)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if got := plan.Env["OPENAI_BASE_URL"]; got != "https://relay.example.com/v1" {
+		t.Fatalf("OPENAI_BASE_URL = %q, want https://relay.example.com/v1", got)
+	}
 }
 
 func TestBuildPlanSetsClaudeBypassEnv(t *testing.T) {
