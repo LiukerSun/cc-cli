@@ -1,22 +1,21 @@
 # cc-cli
 
-`ccc` 是一个为了“快速切换并直接运行不同模型配置”而写的命令行工具。
+`ccc` 是一个面向终端用户的模型切换器。
 
-它不追求做通用配置平台，核心目标只有一个：让你在终端里随时在 `claude` 和 `codex` 间切换不同官方源、第三方转发或自定义模型，并立刻开跑。
+它解决的是一个很具体的问题：你已经装了 `claude` 或 `codex`，也有多套官方源、转发地址、不同模型和不同 API Key，但每次切换都要改环境变量、改本地配置、再重新执行命令，过程很碎。`ccc` 把这件事压缩成了“选一个 profile，然后直接开跑”。
+
+适合的场景：
+
+- 你在 `claude` 和 `codex` 之间来回切
+- 你同时用官方源和第三方 relay
+- 你希望把 `base_url`、`api_key`、`model`、`fast_model` 固化成多个 profile
+- 你不想每次手改 `~/.claude` 或 `~/.codex`
 
 当前主实现已经是 Go 版本。仓库里的 `bin/ccc` 和 `bin/ccc.ps1` 只是兼容 wrapper，正式入口是安装后的 `ccc` 二进制。
 
-## 核心体验
+## 30 秒上手
 
-- `ccc` 直接运行
-- 终端里存在多个配置时，默认弹出模型选择列表
-- 支持方向键上下选择，也支持 `j` / `k`
-- `ccc add` 无参数进入交互式添加
-- `ccc add openai sk-xxx [model]` 这类快捷模式仍然保留
-- 运行前会按配置自动同步 `~/.claude` 或 `~/.codex`
-- 缺少 `claude` / `codex` 时会尝试自动安装对应 CLI
-
-## 安装
+安装：
 
 macOS / Linux:
 
@@ -30,51 +29,58 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 ```
 
-默认安装路径：
-
-- Linux / macOS: `~/.local/bin/ccc`
-- Windows: `%LOCALAPPDATA%\Programs\ccc\bin\ccc.exe`
-
-安装说明：
-
-- 安装 `ccc` 本体不要求预先安装 Node.js
-- 如果是在本地仓库里执行安装脚本，安装器会直接用当前源码构建
-- `claude` / `codex` 的依赖检查和自动安装发生在真正运行 profile 时
-
-## 快速开始
-
-先添加一个配置：
+添加一个配置：
 
 ```bash
 ccc add
 ```
 
-这会进入交互流程，当前内置了四类入口：
-
-1. `ZAI / ZHIPU AI`
-2. `Alibaba Coding Plan`
-3. `OpenAI Codex`
-4. `Manual input`
-
-添加完成后，直接运行：
+直接运行：
 
 ```bash
 ccc
 ```
 
-行为说明：
+默认行为：
 
-- 没有配置时会提示先执行 `ccc add`
-- 只有一个配置时会直接运行它
-- 有多个配置且当前在交互终端里时，会先打开选择器
-- 选择后会把该 profile 设为当前 profile
+- 没有配置时，提示先执行 `ccc add`
+- 只有一个配置时，直接运行该 profile
+- 有多个配置时，在交互终端里打开选择器
+- 选中的 profile 会自动保存成当前 profile
+
+## 这个工具会帮你做什么
+
+`ccc` 运行一个 profile 时，通常会顺手做完这些事情：
+
+- 选择要执行的目标命令：`claude` 或 `codex`
+- 注入当前 profile 对应的模型和认证信息
+- 在需要时同步外部配置到 `~/.claude` 或 `~/.codex`
+- 目标 CLI 缺失时，先检查依赖并尝试自动安装
+- 需要时进入 bypass 模式
+
+你不需要再手动记住：
+
+- 这次应该切哪个 `base_url`
+- 这次要用哪个模型
+- 当前终端里该设置哪些环境变量
+- `codex` 和 `claude` 的本地配置文件各自该怎么改
+
+## 核心体验
+
+- `ccc` 直接进入运行流程
+- 默认支持交互式 profile 选择
+- 支持方向键上 / 下，也支持 `j` / `k`
+- `ccc add` 无参数进入交互式添加
+- 保留 `ccc add openai sk-xxx [model]` 这类快捷写法
+- 默认自动同步 `~/.claude` 或 `~/.codex`
+- 缺少 `claude` / `codex` 时会尝试自动安装
 
 ## 常用命令
 
 ```text
+ccc
 ccc help
 ccc version
-ccc
 ccc -y
 ccc run [profile-id-or-name] [--dry-run] [--env-only] [-y|--bypass] [-- cli-args...]
 ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]
@@ -102,24 +108,31 @@ ccc upgrade [--version <semver>] [--dry-run]
 
 ## 添加配置
 
-### 1. 交互模式
+### 交互模式
 
 ```bash
 ccc add
 ```
 
+当前内置入口：
+
+1. `ZAI / ZHIPU AI`
+2. `Alibaba Coding Plan`
+3. `OpenAI Codex`
+4. `Manual input`
+
 各入口行为：
 
-- `ZAI / ZHIPU AI`: 输入 API Key，自动拉取模型列表，选择主模型和快速模型
-- `Alibaba Coding Plan`: 输入 API Key，自动拉取模型列表，选择主模型和快速模型
-- `OpenAI Codex`: 输入 Base URL、API Key、模型
-- `Manual input`: 手动指定 `claude` 或 `codex`、Base URL、模型等字段
+- `ZAI / ZHIPU AI`：输入 API Key，自动拉取模型列表，选择主模型和快速模型
+- `Alibaba Coding Plan`：输入 API Key，自动拉取模型列表，选择主模型和快速模型
+- `OpenAI Codex`：输入 Base URL、API Key、模型
+- `Manual input`：手动指定 `claude` 或 `codex`、Base URL、模型等字段
 
-如果在线拉取模型失败，会自动退回内置模型列表，不会卡死在接口请求上。
+如果在线拉取模型失败，会自动回退到内置模型列表，不会卡死在接口请求上。
 
-### 2. 快捷模式
+### 快捷模式
 
-保留适合脚本和一次性录入的写法：
+适合脚本、临时录入或一次性批量配置：
 
 ```bash
 ccc add openai sk-xxx
@@ -143,7 +156,7 @@ ccc add anthropic sk-ant-xxx claude-3-7-sonnet
 - `zai` / `glm` -> `zhipu`
 - `qwen` / `dashscope` / `tongyi` -> `alibaba`
 
-### 3. 精细控制
+### 精细控制
 
 如果你想完全自己定义，也可以直接走 profile 命令：
 
@@ -157,7 +170,7 @@ ccc profile add \
   --model gpt-5.4
 ```
 
-常用更新命令：
+常用维护命令：
 
 ```bash
 ccc profile list
@@ -179,7 +192,7 @@ ccc profile delete my-relay
 
 如果当前终端不支持方向键原始模式，会自动回退到数字选择。
 
-示例：
+常见例子：
 
 ```bash
 ccc
@@ -209,8 +222,8 @@ ccc run my-profile -y
 
 不同命令的处理方式不同：
 
-- `claude`: 注入 `CLAUDE_SKIP_PERMISSIONS=1`、`IS_SANDBOX=1`，并追加 `--dangerously-skip-permissions`
-- `codex`: 追加 `--dangerously-bypass-approvals-and-sandbox`
+- `claude`：注入 `CLAUDE_SKIP_PERMISSIONS=1`、`IS_SANDBOX=1`，并追加 `--dangerously-skip-permissions`
+- `codex`：追加 `--dangerously-bypass-approvals-and-sandbox`
 
 这部分逻辑是为了兼容当前 CLI 的实际行为，不建议在不了解风险的环境里滥用。
 
@@ -300,8 +313,8 @@ ccc doctor
 
 自动安装目标 CLI 时，当前要求：
 
-- `claude`: Node.js `>= 18.0.0`
-- `codex`: Node.js `>= 16.0.0`
+- `claude`：Node.js `>= 18.0.0`
+- `codex`：Node.js `>= 16.0.0`
 
 如果目标命令不存在，`ccc` 会在运行前检查依赖并尝试自动安装。
 
@@ -351,16 +364,3 @@ bash tests/test.sh
 bash tests/check_version.sh
 bash tests/check_version.sh v2.2.1
 ```
-
-重构说明见：
-
-- [docs/go-refactor.md](/root/cc-cli/docs/go-refactor.md)
-
-## 状态
-
-当前仓库仍处于重构过渡期，后续预计继续推进：
-
-- provider 辅助能力
-- 更完整的命令兼容层
-- 更薄的发布/安装体验
-- 逐步淘汰旧 Bash / PowerShell 主逻辑
