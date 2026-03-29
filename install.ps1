@@ -214,6 +214,51 @@ function Uninstall-Ccc {
     Write-Info "Config and data were left untouched."
 }
 
+function Get-ProfileCandidates {
+    return @(
+        (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"),
+        (Join-Path $env:USERPROFILE "Documents\PowerShell\Microsoft.PowerShell_profile.ps1")
+    ) | Select-Object -Unique
+}
+
+function Find-LegacyProfileReferences {
+    $legacyShimPath = Join-Path $env:USERPROFILE "bin\ccc.ps1"
+    $matches = @()
+
+    foreach ($profilePath in (Get-ProfileCandidates)) {
+        if (-not (Test-Path $profilePath)) {
+            continue
+        }
+
+        $content = Get-Content -Path $profilePath -Raw -ErrorAction SilentlyContinue
+        if ([string]::IsNullOrWhiteSpace($content)) {
+            continue
+        }
+
+        if ($content.Contains($legacyShimPath) -or $content.Contains("bin\ccc.ps1")) {
+            $matches += $profilePath
+        }
+    }
+
+    return $matches
+}
+
+function Install-LegacyProfileShim {
+    $legacyShimPath = Join-Path $env:USERPROFILE "bin\ccc.ps1"
+    $legacyShimDir = Split-Path -Parent $legacyShimPath
+
+    New-Item -ItemType Directory -Force -Path $legacyShimDir | Out-Null
+
+    @"
+# Auto-generated compatibility shim for legacy PowerShell profiles.
+Write-Warning "Using legacy ccc PowerShell shim. Update your profile to call ccc.exe directly or add $InstallBinDir to PATH."
+& "$InstallPath" @args
+exit `$LASTEXITCODE
+"@ | Set-Content -Path $legacyShimPath -Encoding UTF8
+
+    return $legacyShimPath
+}
+
 if ($Action -eq "uninstall") {
     Uninstall-Ccc
     exit 0
@@ -226,9 +271,23 @@ if ($shouldUseLocalBuild) {
     Install-FromRelease
 }
 
+$legacyProfileRefs = Find-LegacyProfileReferences
+$legacyShimPath = $null
+if ($legacyProfileRefs.Count -gt 0) {
+    $legacyShimPath = Install-LegacyProfileShim
+}
+
 Write-Info ""
 Write-Info "$ProjectName installed to $InstallPath"
 if (-not (($env:PATH -split ';') -contains $InstallBinDir)) {
     Write-Info "Warning: $InstallBinDir is not in PATH."
+}
+if ($legacyShimPath) {
+    Write-Info "Warning: detected a legacy ccc PowerShell profile entry."
+    foreach ($profilePath in $legacyProfileRefs) {
+        Write-Info "  $profilePath"
+    }
+    Write-Info "Installed compatibility shim to $legacyShimPath"
+    Write-Info "Update your profile to stop calling $legacyShimPath and prefer $InstallPath or PATH lookup."
 }
 Write-Info "Run 'ccc version' to verify the installation."
