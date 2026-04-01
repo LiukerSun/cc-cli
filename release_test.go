@@ -43,11 +43,8 @@ func TestInstallersReferenceExpectedPlatforms(t *testing.T) {
 		if !strings.Contains(installSh, `echo "`+arch+`"`) {
 			t.Fatalf("install.sh no longer advertises support for %s", arch)
 		}
-		if !strings.Contains(installPs1, `"Arm64" { $goArch = "arm64" }`) && arch == "arm64" {
-			t.Fatalf("install.ps1 no longer maps arm64")
-		}
-		if !strings.Contains(installPs1, `"X64" { $goArch = "amd64" }`) && arch == "amd64" {
-			t.Fatalf("install.ps1 no longer maps amd64")
+		if !strings.Contains(installPs1, `$goArch = "`+arch+`"`) {
+			t.Fatalf("install.ps1 no longer maps %s", arch)
 		}
 	}
 }
