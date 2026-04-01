@@ -31,7 +31,7 @@ func TestBuildPlanUsesCurrentProfile(t *testing.T) {
 	if plan.Command != "codex" {
 		t.Fatalf("plan.Command = %q, want codex", plan.Command)
 	}
-	if len(plan.Args) == 0 || plan.Args[0] != "--dangerously-bypass-approvals-and-sandbox" {
+	if len(plan.Args) == 0 || plan.Args[0] != "--full-auto" {
 		t.Fatalf("unexpected args: %#v", plan.Args)
 	}
 	if got := plan.Env["OPENAI_MODEL"]; got != "gpt-5.4" {
