@@ -847,7 +847,7 @@ func TestTopLevelBypassShortcutExecutesRun(t *testing.T) {
 		t.Fatalf("Run -y exitCode = %d, stderr = %s", exitCode, stderr.String())
 	}
 
-	if !strings.Contains(stdout.String(), "arg1:--full-auto") {
+	if !strings.Contains(stdout.String(), "arg1:--yolo") {
 		t.Fatalf("output missing bypass arg: %s", stdout.String())
 	}
 }

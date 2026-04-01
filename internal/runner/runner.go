@@ -107,7 +107,7 @@ func profileEnv(profile config.Profile) map[string]string {
 
 func bypassFlag(command string) string {
 	if command == "codex" {
-		return "--full-auto"
+		return "--yolo"
 	}
 	return "--dangerously-skip-permissions"
 }
