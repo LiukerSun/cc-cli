@@ -73,11 +73,26 @@ function Get-TagName {
 }
 
 function Get-OsArch {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    switch ($arch) {
-        "X64" { $goArch = "amd64" }
-        "Arm64" { $goArch = "arm64" }
-        default { Fail "Unsupported architecture: $arch" }
+    $archStr = ""
+
+    # Prefer RuntimeInformation (available on .NET 4.7.1+ / .NET Core)
+    try {
+        $archStr = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    } catch {}
+
+    # Fall back to PROCESSOR_ARCHITECTURE env var (always available on Windows)
+    if ([string]::IsNullOrWhiteSpace($archStr)) {
+        $archStr = $env:PROCESSOR_ARCHITECTURE
+    }
+
+    if ([string]::IsNullOrWhiteSpace($archStr)) {
+        Fail "Unable to detect system architecture"
+    }
+
+    switch -Regex ($archStr.ToLowerInvariant()) {
+        "^(x64|amd64|em64t)$" { $goArch = "amd64" }
+        "^arm64|aarch64$"     { $goArch = "arm64" }
+        default               { Fail "Unsupported architecture: $archStr" }
     }
 
     return @{
