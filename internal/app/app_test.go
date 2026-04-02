@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -107,6 +108,26 @@ func stubInteractiveInput(t *testing.T, interactive bool) {
 	t.Cleanup(func() {
 		stdinIsInteractive = previous
 	})
+}
+
+func stubSecretPrompt(t *testing.T, supported bool, value string, err error) *int {
+	t.Helper()
+
+	previousSupported := secretInputSupported
+	previousRead := readSecretInput
+	calls := 0
+	secretInputSupported = func(io.Reader) bool {
+		return supported
+	}
+	readSecretInput = func(io.Reader, io.Writer, string) (string, error) {
+		calls++
+		return value, err
+	}
+	t.Cleanup(func() {
+		secretInputSupported = previousSupported
+		readSecretInput = previousRead
+	})
+	return &calls
 }
 
 func stubArrowSelector(t *testing.T, enabled bool) {
@@ -320,6 +341,39 @@ func TestTopLevelAddInteractiveCodex(t *testing.T) {
 	}
 	if profile.Name != "Codex (gpt-5.4-mini)" {
 		t.Fatalf("Name = %q, want Codex (gpt-5.4-mini)", profile.Name)
+	}
+}
+
+func TestPromptSecretRequiredUsesHiddenInputWhenAvailable(t *testing.T) {
+	calls := stubSecretPrompt(t, true, "sk-hidden", nil)
+
+	var stdout bytes.Buffer
+	value, err := promptSecretRequired(strings.NewReader("ignored\n"), bufio.NewReader(strings.NewReader("ignored\n")), &stdout, "API key")
+	if err != nil {
+		t.Fatalf("promptSecretRequired returned error: %v", err)
+	}
+	if value != "sk-hidden" {
+		t.Fatalf("value = %q, want sk-hidden", value)
+	}
+	if *calls != 1 {
+		t.Fatalf("hidden secret prompt calls = %d, want 1", *calls)
+	}
+}
+
+func TestPromptSecretRequiredFallsBackToBufferedReader(t *testing.T) {
+	calls := stubSecretPrompt(t, false, "", nil)
+
+	input := strings.NewReader("sk-buffered\n")
+	var stdout bytes.Buffer
+	value, err := promptSecretRequired(input, bufio.NewReader(input), &stdout, "API key")
+	if err != nil {
+		t.Fatalf("promptSecretRequired returned error: %v", err)
+	}
+	if value != "sk-buffered" {
+		t.Fatalf("value = %q, want sk-buffered", value)
+	}
+	if *calls != 0 {
+		t.Fatalf("hidden secret prompt calls = %d, want 0", *calls)
 	}
 }
 
@@ -540,7 +594,7 @@ func TestProfileDuplicateCreatesUniqueCopy(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if exitCode := Run([]string{"profile", "list", "--json"}, &stdout, &stderr); exitCode != 0 {
+	if exitCode := Run([]string{"profile", "list", "--json", "--show-secrets"}, &stdout, &stderr); exitCode != 0 {
 		t.Fatalf("profile list exitCode = %d, stderr = %s", exitCode, stderr.String())
 	}
 	profiles := decodeProfileList(t, stdout.String())
@@ -553,6 +607,45 @@ func TestProfileDuplicateCreatesUniqueCopy(t *testing.T) {
 	}
 	if profile.APIKey != "sk-test" {
 		t.Fatalf("duplicated profile api key = %q, want sk-test", profile.APIKey)
+	}
+}
+
+func TestProfileListJSONMasksSecretsByDefault(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "openai",
+		"--name", "Masked Relay",
+		"--api-key", "sk-secret-1234",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"profile", "list", "--json"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile list exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "sk-secret-1234") {
+		t.Fatalf("profile list JSON should mask secrets: %s", stdout.String())
+	}
+	profile := findProfileByID(t, decodeProfileList(t, stdout.String()), "masked-relay")
+	if profile.APIKey != "****1234" {
+		t.Fatalf("masked profile api key = %q, want ****1234", profile.APIKey)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"profile", "list", "--json", "--show-secrets"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile list --show-secrets exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	profile = findProfileByID(t, decodeProfileList(t, stdout.String()), "masked-relay")
+	if profile.APIKey != "sk-secret-1234" {
+		t.Fatalf("unmasked profile api key = %q, want sk-secret-1234", profile.APIKey)
 	}
 }
 
@@ -749,6 +842,22 @@ func TestConfigShowReadsLegacyConfig(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"name": "Legacy Claude"`) {
 		t.Fatalf("config show output missing profile: %s", stdout.String())
 	}
+	if strings.Contains(stdout.String(), `"api_key": "token"`) {
+		t.Fatalf("config show should mask api_key by default: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `"api_key": "****oken"`) {
+		t.Fatalf("config show output missing masked api_key: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Run([]string{"config", "show", "--show-secrets"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("config show --show-secrets exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"api_key": "token"`) {
+		t.Fatalf("config show --show-secrets output missing raw api_key: %s", stdout.String())
+	}
 }
 
 func TestProfileUseAndCurrent(t *testing.T) {
@@ -848,6 +957,9 @@ func TestRunDryRunUsesCurrentProfile(t *testing.T) {
 	if !strings.Contains(output, "Command: codex") {
 		t.Fatalf("dry-run output missing command: %s", output)
 	}
+	if !strings.Contains(output, "Missing CLI policy: fail") {
+		t.Fatalf("dry-run output missing missing-CLI policy: %s", output)
+	}
 	if !strings.Contains(output, "OPENAI_MODEL=gpt-5.4") {
 		t.Fatalf("dry-run output missing model env: %s", output)
 	}
@@ -906,7 +1018,7 @@ func TestRunDryRunPromptsForProfileSelection(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Select a model:") {
+	if !strings.Contains(output, "Select a profile:") {
 		t.Fatalf("output missing selection prompt: %s", output)
 	}
 	if !strings.Contains(output, "Codex Relay") {
@@ -979,10 +1091,10 @@ func TestRunDryRunSupportsArrowSelection(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Use Up/Down to choose a model") {
+	if !strings.Contains(output, "Use Up/Down to choose a profile") {
 		t.Fatalf("output missing arrow selector help: %s", output)
 	}
-	if !strings.Contains(output, "ccc\r\n\r\nUse Up/Down to choose a model") {
+	if !strings.Contains(output, "ccc\r\n\r\nUse Up/Down to choose a profile") {
 		t.Fatalf("output missing CRLF selector header formatting: %q", output)
 	}
 	if !strings.Contains(output, "Command: codex") {
@@ -1107,11 +1219,53 @@ func TestRunExecutesTargetCommand(t *testing.T) {
 		t.Fatalf("run output missing arg1: %s", output)
 	}
 
+	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("expected codex config to remain untouched without --auto-sync, err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "auth.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected codex auth to remain untouched without --auto-sync, err = %v", err)
+	}
+}
+
+func TestRunAutoSyncWritesExternalConfig(t *testing.T) {
+	home := setupTestHome(t)
+	binDir := filepath.Join(home, "bin")
+	prependTestPath(t, binDir)
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll binDir: %v", err)
+	}
+	script := "#!/bin/sh\nprintf 'synced-run:%s\\n' \"$OPENAI_MODEL\"\n"
+	scriptWin := "@echo off\r\necho synced-run:%OPENAI_MODEL%\r\n"
+	writeTestCommand(t, binDir, "codex", script, scriptWin)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Codex Relay",
+		"--command", "codex",
+		"--base-url", "https://relay.example.com/v1",
+		"--api-key", "sk-test",
+		"--model", "gpt-5.4",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"run", "--auto-sync"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run --auto-sync exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "synced-run:gpt-5.4") {
+		t.Fatalf("run output missing executed model: %s", stdout.String())
+	}
 	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); err != nil {
-		t.Fatalf("expected codex config to be synced: %v", err)
+		t.Fatalf("expected codex config to be synced with --auto-sync: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".codex", "auth.json")); err != nil {
-		t.Fatalf("expected codex auth to be synced: %v", err)
+		t.Fatalf("expected codex auth to be synced with --auto-sync: %v", err)
 	}
 }
 
@@ -1158,6 +1312,100 @@ func TestDoctorInspectsInstalledTools(t *testing.T) {
 	}
 	if !strings.Contains(output, "- codex installed: yes") {
 		t.Fatalf("doctor output missing codex status: %s", output)
+	}
+}
+
+func TestDoctorWarnsWhenCurrentProfileCommandMissing(t *testing.T) {
+	setupTestHome(t)
+	t.Setenv("PATH", "")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Codex Relay",
+		"--command", "codex",
+		"--base-url", "https://relay.example.com/v1",
+		"--api-key", "sk-test",
+		"--model", "gpt-5.4",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode := Run([]string{"doctor"}, &stdout, &stderr)
+	if exitCode == 0 {
+		t.Fatalf("doctor exitCode = %d, want warning exit", exitCode)
+	}
+	if !strings.Contains(stdout.String(), "use 'ccc run --auto-install'") {
+		t.Fatalf("doctor output missing auto-install guidance: %s", stdout.String())
+	}
+}
+
+func TestRunFailsWhenCLIMissingWithoutAutoInstall(t *testing.T) {
+	home := setupTestHome(t)
+	binDir := filepath.Join(home, "bin")
+	npmPrefix := filepath.Join(home, ".npm-global")
+	npmBinDir := filepath.Join(npmPrefix, "bin")
+	prependTestPath(t, binDir)
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll binDir: %v", err)
+	}
+	if err := os.MkdirAll(npmBinDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll npmBinDir: %v", err)
+	}
+
+	nodeScript := "#!/bin/sh\necho v20.11.0\n"
+	npmScript := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"--version\" ]; then echo 10.8.0; exit 0; fi\n" +
+		"if [ \"$1\" = \"config\" ] && [ \"$2\" = \"get\" ] && [ \"$3\" = \"prefix\" ]; then echo \"" + npmPrefix + "\"; exit 0; fi\n" +
+		"if [ \"$1\" = \"install\" ] && [ \"$2\" = \"-g\" ] && [ \"$3\" = \"@openai/codex\" ]; then printf '#!/bin/sh\\necho auto-installed-codex\\n' > \"" + filepath.Join(npmBinDir, "codex") + "\"; /bin/chmod +x \"" + filepath.Join(npmBinDir, "codex") + "\"; exit 0; fi\n" +
+		"echo unexpected npm args: \"$@\" >&2\n" +
+		"exit 1\n"
+	nodeScriptWin := "@echo off\r\necho v20.11.0\r\n"
+	npmScriptWin := "@echo off\r\n" +
+		"if \"%~1\"==\"--version\" (\r\n" +
+		"  echo 10.8.0\r\n" +
+		"  exit /b 0\r\n" +
+		")\r\n" +
+		"if \"%~1\"==\"config\" if \"%~2\"==\"get\" if \"%~3\"==\"prefix\" (\r\n" +
+		"  echo " + npmPrefix + "\r\n" +
+		"  exit /b 0\r\n" +
+		")\r\n" +
+		"if \"%~1\"==\"install\" if \"%~2\"==\"-g\" if \"%~3\"==\"@openai/codex\" (\r\n" +
+		"  > \"" + filepath.Join(npmBinDir, "codex.cmd") + "\" (\r\n" +
+		"    echo @echo off\r\n" +
+		"    echo echo auto-installed-codex\r\n" +
+		"  )\r\n" +
+		"  exit /b 0\r\n" +
+		")\r\n" +
+		"echo unexpected npm args: %* 1>&2\r\n" +
+		"exit /b 1\r\n"
+	writeTestCommand(t, binDir, "node", nodeScript, nodeScriptWin)
+	writeTestCommand(t, binDir, "npm", npmScript, npmScriptWin)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Codex Relay",
+		"--command", "codex",
+		"--base-url", "https://relay.example.com",
+		"--api-key", "sk-test",
+		"--model", "gpt-5.4",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"run"}, &stdout, &stderr); exitCode == 0 {
+		t.Fatalf("run exitCode = %d, want failure when CLI is missing", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "rerun with --auto-install") {
+		t.Fatalf("stderr missing auto-install guidance: %s", stderr.String())
 	}
 }
 
@@ -1219,8 +1467,8 @@ func TestRunAutoInstallsMissingCLI(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if exitCode := Run([]string{"run"}, &stdout, &stderr); exitCode != 0 {
-		t.Fatalf("run exitCode = %d, stdout = %s stderr = %s", exitCode, stdout.String(), stderr.String())
+	if exitCode := Run([]string{"run", "--auto-install"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run --auto-install exitCode = %d, stdout = %s stderr = %s", exitCode, stdout.String(), stderr.String())
 	}
 
 	output := stdout.String()

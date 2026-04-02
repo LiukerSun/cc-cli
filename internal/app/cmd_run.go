@@ -59,6 +59,8 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 	fs.SetOutput(io.Discard)
 	dryRun := fs.Bool("dry-run", false, "print the execution plan instead of running it")
 	envOnly := fs.Bool("env-only", false, "print the environment variables instead of running the command")
+	autoInstall := fs.Bool("auto-install", false, "install the target CLI automatically when missing")
+	autoSync := fs.Bool("auto-sync", false, "write external Claude/Codex config before running")
 	bypass := fs.Bool("bypass", false, "enable bypass permissions")
 	fs.BoolVar(bypass, "y", false, "enable bypass permissions")
 
@@ -101,7 +103,7 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 	}
 
 	if *dryRun {
-		printRunPlan(stdout, home, plan)
+		printRunPlan(stdout, home, plan, *autoInstall, *autoSync)
 		return 0
 	}
 	if *envOnly {
@@ -111,12 +113,12 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 		return 0
 	}
 
-	if err := deps.EnsureCLI(plan.Command, stdout, stderr); err != nil {
+	if err := ensureRunCLI(plan.Command, *autoInstall, stdout, stderr); err != nil {
 		fmt.Fprintf(stderr, "dependency check failed: %v\n", err)
 		return 1
 	}
 
-	if plan.Profile.SyncExternal {
+	if plan.Profile.SyncExternal && *autoSync {
 		if _, err := cfgsync.Apply(home, plan.Profile); err != nil {
 			fmt.Fprintf(stderr, "failed to sync external config: %v\n", err)
 			return 1
@@ -157,16 +159,36 @@ func splitRunArgs(args []string) (string, []string, []string) {
 	return profileIdentifier, before, after
 }
 
-func printRunPlan(stdout io.Writer, home string, plan runner.Plan) {
+func ensureRunCLI(command string, autoInstall bool, stdout, stderr io.Writer) error {
+	if deps.InspectTool(command).Installed {
+		return nil
+	}
+	if autoInstall {
+		return deps.EnsureCLI(command, stdout, stderr)
+	}
+
+	spec, ok := deps.SpecFor(command)
+	if !ok {
+		return fmt.Errorf("%s CLI not found on PATH", command)
+	}
+	return fmt.Errorf("%s CLI not found on PATH; rerun with --auto-install or install manually: npm install -g %s", command, spec.PackageName)
+}
+
+func printRunPlan(stdout io.Writer, home string, plan runner.Plan, autoInstall, autoSync bool) {
 	fmt.Fprintln(stdout, "ccc run --dry-run")
 	fmt.Fprintln(stdout)
 	fmt.Fprintf(stdout, "Profile: %s (%s)\n", plan.Profile.Name, plan.Profile.ID)
 	fmt.Fprintf(stdout, "Command: %s\n", plan.Command)
+	fmt.Fprintf(stdout, "Missing CLI policy: %s\n", runPolicy(autoInstall, "install automatically", "fail"))
 	fmt.Fprintf(stdout, "External sync: %s\n", yesNo(plan.Profile.SyncExternal))
+	fmt.Fprintf(stdout, "External sync policy: %s\n", runPolicy(plan.Profile.SyncExternal && autoSync, "write before run", "skip"))
 	if plan.Profile.SyncExternal {
 		fmt.Fprintln(stdout, "Sync targets:")
 		for _, path := range cfgsync.TargetPaths(home, plan.Profile) {
 			fmt.Fprintf(stdout, "- %s\n", path)
+		}
+		if !autoSync {
+			fmt.Fprintf(stdout, "Note: external sync is configured but skipped by default. Use 'ccc sync %s' or rerun with --auto-sync.\n", plan.Profile.ID)
 		}
 	}
 	if len(plan.Args) == 0 {
@@ -178,4 +200,11 @@ func printRunPlan(stdout io.Writer, home string, plan runner.Plan) {
 	for _, entry := range runner.EnvList(plan) {
 		fmt.Fprintf(stdout, "- %s\n", entry)
 	}
+}
+
+func runPolicy(enabled bool, whenEnabled, whenDisabled string) string {
+	if enabled {
+		return whenEnabled
+	}
+	return whenDisabled
 }

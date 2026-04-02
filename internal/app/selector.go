@@ -27,7 +27,7 @@ func selectRunProfileWithNumbers(stdin io.Reader, stdout io.Writer, cfg config.F
 
 	fmt.Fprintln(stdout, "ccc run")
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Select a model:")
+	fmt.Fprintln(stdout, "Select a profile:")
 	for i, profile := range cfg.Profiles {
 		current := ""
 		if profile.ID == cfg.CurrentProfile {
@@ -126,7 +126,7 @@ const (
 func printArrowSelectorList(stdout io.Writer, cfg config.File) {
 	writeSelectorLine(stdout, "ccc")
 	writeSelectorLine(stdout, "")
-	writeSelectorLine(stdout, "Use Up/Down to choose a model, Enter to run, q to quit.")
+	writeSelectorLine(stdout, "Use Up/Down to choose a profile, Enter to run, q to quit.")
 	writeSelectorLine(stdout, "")
 	for i, profile := range cfg.Profiles {
 		current := ""
