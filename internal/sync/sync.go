@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/LiukerSun/cc-cli/internal/config"
+	"github.com/LiukerSun/cc-cli/internal/util"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -52,7 +53,7 @@ func applyClaude(home string, profile config.Profile) (Result, error) {
 	}
 
 	envMap := ensureMap(doc, "env")
-	fastModel := firstNonEmpty(profile.FastModel, profile.Model)
+	fastModel := util.FirstNonEmpty(profile.FastModel, profile.Model)
 	envMap["ANTHROPIC_MODEL"] = profile.Model
 	envMap["ANTHROPIC_SMALL_FAST_MODEL"] = fastModel
 	envMap["CLAUDE_CODE_MODEL"] = profile.Model
@@ -60,8 +61,12 @@ func applyClaude(home string, profile config.Profile) (Result, error) {
 	envMap["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.Model
 	doc["model"] = profile.Model
 
-	permissions := ensureMap(doc, "permissions")
-	permissions["deny"] = appendUniqueString(permissions["deny"], "Agent(Explore)")
+	if len(profile.SyncDenyPermissions) > 0 {
+		permissions := ensureMap(doc, "permissions")
+		for _, permission := range profile.SyncDenyPermissions {
+			permissions["deny"] = appendUniqueString(permissions["deny"], permission)
+		}
+	}
 
 	if err := writeJSON(settingsPath, doc, 0o600); err != nil {
 		return Result{}, err
@@ -96,7 +101,7 @@ func applyCodex(home string, profile config.Profile) (Result, error) {
 	providers := ensureMap(configDoc, "model_providers")
 	codexProvider := ensureNestedMap(providers, "codex")
 	codexProvider["name"] = "codex"
-	codexProvider["base_url"] = normalizeCodexBaseURL(profile.BaseURL)
+	codexProvider["base_url"] = util.NormalizeCodexBaseURL(profile.BaseURL)
 	codexProvider["wire_api"] = "responses"
 
 	if err := writeTOML(configPath, configDoc, 0o600); err != nil {
@@ -115,24 +120,6 @@ func applyCodex(home string, profile config.Profile) (Result, error) {
 	}
 
 	return Result{Paths: []string{configPath, authPath}}, nil
-}
-
-func normalizeCodexBaseURL(baseURL string) string {
-	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	switch {
-	case strings.HasSuffix(trimmed, "/v1"):
-		return trimmed
-	case strings.HasSuffix(trimmed, "/v1/models"):
-		return strings.TrimSuffix(trimmed, "/models")
-	case strings.HasSuffix(trimmed, "/models"):
-		return strings.TrimSuffix(trimmed, "/models") + "/v1"
-	case strings.HasSuffix(trimmed, "/responses"):
-		return strings.TrimSuffix(trimmed, "/responses") + "/v1"
-	case trimmed == "":
-		return "/v1"
-	default:
-		return trimmed + "/v1"
-	}
 }
 
 func ensureMap(doc map[string]any, key string) map[string]any {
@@ -188,10 +175,7 @@ func writeJSON(path string, payload any, mode os.FileMode) error {
 		return fmt.Errorf("marshal json %s: %w", path, err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, mode); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
+	return writeFileAtomically(path, data, mode)
 }
 
 func writeTOML(path string, payload any, mode os.FileMode) error {
@@ -199,17 +183,17 @@ func writeTOML(path string, payload any, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("marshal toml %s: %w", path, err)
 	}
-	if err := os.WriteFile(path, data, mode); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
+	return writeFileAtomically(path, data, mode)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
+func writeFileAtomically(path string, data []byte, mode os.FileMode) error {
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, mode); err != nil {
+		return fmt.Errorf("write temp %s: %w", tmpPath, err)
 	}
-	return ""
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace %s: %w", path, err)
+	}
+	return nil
 }

@@ -3,6 +3,8 @@ package platform
 import (
 	"errors"
 	"path/filepath"
+
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 type EnvLookup func(string) string
@@ -26,8 +28,8 @@ func ResolveLayout(goos, home string, getenv EnvLookup) (Layout, error) {
 	}
 
 	if goos == "windows" {
-		appData := firstNonEmpty(getenv("APPDATA"), filepath.Join(home, "AppData", "Roaming"))
-		localAppData := firstNonEmpty(getenv("LOCALAPPDATA"), filepath.Join(home, "AppData", "Local"))
+		appData := util.FirstNonEmpty(getenv("APPDATA"), filepath.Join(home, "AppData", "Roaming"))
+		localAppData := util.FirstNonEmpty(getenv("LOCALAPPDATA"), filepath.Join(home, "AppData", "Local"))
 
 		return Layout{
 			HomeDir:   home,
@@ -39,10 +41,10 @@ func ResolveLayout(goos, home string, getenv EnvLookup) (Layout, error) {
 		}, nil
 	}
 
-	configBase := firstNonEmpty(getenv("XDG_CONFIG_HOME"), filepath.Join(home, ".config"))
-	dataBase := firstNonEmpty(getenv("XDG_DATA_HOME"), filepath.Join(home, ".local", "share"))
-	cacheBase := firstNonEmpty(getenv("XDG_CACHE_HOME"), filepath.Join(home, ".cache"))
-	stateBase := firstNonEmpty(getenv("XDG_STATE_HOME"), filepath.Join(home, ".local", "state"))
+	configBase := util.FirstNonEmpty(getenv("XDG_CONFIG_HOME"), filepath.Join(home, ".config"))
+	dataBase := util.FirstNonEmpty(getenv("XDG_DATA_HOME"), filepath.Join(home, ".local", "share"))
+	cacheBase := util.FirstNonEmpty(getenv("XDG_CACHE_HOME"), filepath.Join(home, ".cache"))
+	stateBase := util.FirstNonEmpty(getenv("XDG_STATE_HOME"), filepath.Join(home, ".local", "state"))
 
 	return Layout{
 		HomeDir:   home,
@@ -56,13 +58,4 @@ func ResolveLayout(goos, home string, getenv EnvLookup) (Layout, error) {
 
 func (l Layout) ConfigFile() string {
 	return filepath.Join(l.ConfigDir, "config.json")
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

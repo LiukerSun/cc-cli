@@ -52,6 +52,54 @@ func TestApplyClaudePreservesUnknownFields(t *testing.T) {
 	if env["CLAUDE_CODE_MODEL"] != "claude-main" {
 		t.Fatalf("unexpected CLAUDE_CODE_MODEL: %#v", env["CLAUDE_CODE_MODEL"])
 	}
+	permissions := doc["permissions"].(map[string]any)
+	deny := permissions["deny"].([]any)
+	if len(deny) != 1 || deny[0] != "Existing" {
+		t.Fatalf("unexpected deny permissions: %#v", deny)
+	}
+}
+
+func TestApplyClaudeAppendsConfiguredDenyPermissions(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"permissions":{"deny":["Existing"]}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := Apply(home, config.Profile{
+		Command:             "claude",
+		BaseURL:             "https://api.anthropic.com",
+		APIKey:              "token",
+		Model:               "claude-main",
+		FastModel:           "claude-fast",
+		SyncDenyPermissions: []string{"Agent(Explore)", "Bash(rm -rf)"},
+	})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	permissions := doc["permissions"].(map[string]any)
+	deny := permissions["deny"].([]any)
+	want := []any{"Existing", "Agent(Explore)", "Bash(rm -rf)"}
+	if len(deny) != len(want) {
+		t.Fatalf("deny len = %d, want %d (%#v)", len(deny), len(want), deny)
+	}
+	for i := range want {
+		if deny[i] != want[i] {
+			t.Fatalf("deny[%d] = %#v, want %#v", i, deny[i], want[i])
+		}
+	}
 }
 
 func TestApplyCodexPreservesUnknownFields(t *testing.T) {
@@ -117,5 +165,31 @@ func TestTargetPaths(t *testing.T) {
 	paths := TargetPaths(home, config.Profile{Command: "codex"})
 	if len(paths) != 2 {
 		t.Fatalf("len(paths) = %d, want 2", len(paths))
+	}
+}
+
+func TestApplyUsesAtomicWritesWithoutLeavingTempFiles(t *testing.T) {
+	home := t.TempDir()
+
+	_, err := Apply(home, config.Profile{
+		Command: "codex",
+		BaseURL: "https://relay.example.com",
+		APIKey:  "sk-test",
+		Model:   "gpt-5.4",
+	})
+	if err != nil {
+		t.Fatalf("Apply codex: %v", err)
+	}
+
+	for _, path := range []string{
+		filepath.Join(home, ".codex", "config.toml"),
+		filepath.Join(home, ".codex", "auth.json"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected %s to exist: %v", path, err)
+		}
+		if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+			t.Fatalf("expected no temp file for %s, got err=%v", path, err)
+		}
 	}
 }

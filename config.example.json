@@ -11,6 +11,9 @@
       "api_key": "your-api-key-here",
       "model": "claude-3-7-sonnet",
       "fast_model": "claude-3-5-haiku",
+      "sync_deny_permissions": [
+        "Agent(Explore)"
+      ],
       "sync_external": true
     },
     {
@@ -46,6 +49,9 @@
       "api_key": "your-api-key-here",
       "model": "glm-5",
       "fast_model": "glm-4.7",
+      "sync_deny_permissions": [
+        "Agent(Explore)"
+      ],
       "sync_external": true
     }
   ]

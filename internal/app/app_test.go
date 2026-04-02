@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -465,6 +467,214 @@ func TestProfileUpdateChangesPresetModelAndEnv(t *testing.T) {
 	}
 	if profile.SyncExternal {
 		t.Fatalf("updated profile should disable sync: %+v", profile)
+	}
+}
+
+func TestProfileAddAndUpdateManageSyncDenyPermissions(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "anthropic",
+		"--name", "Claude Restricted",
+		"--api-key", "sk-ant-test",
+		"--deny-permission", "Agent(Explore)",
+		"--deny-permission", "Bash(rm -rf)",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{
+		"profile", "update", "claude-restricted",
+		"--unset-deny-permission", "Agent(Explore)",
+		"--deny-permission", "Read(/etc/shadow)",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile update exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"profile", "list", "--json"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile list exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	profile := findProfileByID(t, decodeProfileList(t, stdout.String()), "claude-restricted")
+	want := []string{"Bash(rm -rf)", "Read(/etc/shadow)"}
+	if len(profile.SyncDenyPermissions) != len(want) {
+		t.Fatalf("SyncDenyPermissions = %#v, want %#v", profile.SyncDenyPermissions, want)
+	}
+	for i := range want {
+		if profile.SyncDenyPermissions[i] != want[i] {
+			t.Fatalf("SyncDenyPermissions[%d] = %q, want %q", i, profile.SyncDenyPermissions[i], want[i])
+		}
+	}
+}
+
+func TestProfileDuplicateCreatesUniqueCopy(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "openai",
+		"--name", "Relay",
+		"--api-key", "sk-test",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{
+		"profile", "duplicate", "relay",
+		"--name", "Relay Backup",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile duplicate exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"profile", "list", "--json"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile list exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	profiles := decodeProfileList(t, stdout.String())
+	if len(profiles) != 2 {
+		t.Fatalf("len(profiles) = %d, want 2", len(profiles))
+	}
+	profile := findProfileByID(t, profiles, "relay-backup")
+	if profile.Name != "Relay Backup" {
+		t.Fatalf("duplicated profile name = %q, want Relay Backup", profile.Name)
+	}
+	if profile.APIKey != "sk-test" {
+		t.Fatalf("duplicated profile api key = %q, want sk-test", profile.APIKey)
+	}
+}
+
+func TestProfileExportAndImportRoundTrip(t *testing.T) {
+	exportPath := filepath.Join(t.TempDir(), "profiles.json")
+
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "anthropic",
+		"--name", "Claude Export",
+		"--api-key", "sk-ant-test",
+		"--deny-permission", "Agent(Explore)",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{
+		"profile", "export", "claude-export",
+		"--output", exportPath,
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile export exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	setupTestHome(t)
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{
+		"profile", "import",
+		"--input", exportPath,
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile import exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"profile", "list", "--json"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile list exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	profile := findProfileByID(t, decodeProfileList(t, stdout.String()), "claude-export")
+	if profile.Name != "Claude Export" {
+		t.Fatalf("imported profile name = %q, want Claude Export", profile.Name)
+	}
+	if len(profile.SyncDenyPermissions) != 1 || profile.SyncDenyPermissions[0] != "Agent(Explore)" {
+		t.Fatalf("imported deny permissions = %#v", profile.SyncDenyPermissions)
+	}
+}
+
+func TestCompatibilityAliases(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if exitCode := Run([]string{"--add", "openai", "sk-test", "gpt-5.4-mini"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("--add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"--list"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("--list exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Codex OpenAI") {
+		t.Fatalf("--list output missing profile: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"--current"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("--current exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "ID: codex-openai") {
+		t.Fatalf("--current output missing current profile: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"-e", "codex-openai"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("-e exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "OPENAI_API_KEY=sk-test") {
+		t.Fatalf("-e output missing env vars: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"--delete", "codex-openai"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("--delete exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+}
+
+func TestUpgradeCheckReportsLatestVersion(t *testing.T) {
+	setupTestHome(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/LiukerSun/cc-cli/releases/latest":
+			_, _ = io.WriteString(w, `{"tag_name":"v2.3.4"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("CCC_RELEASE_API_BASE_URL", server.URL)
+	t.Setenv("CCC_RELEASE_DOWNLOAD_BASE_URL", server.URL+"/LiukerSun/cc-cli/releases/download")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := Run([]string{"upgrade", "--check"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("upgrade --check exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Latest version: 2.3.4") {
+		t.Fatalf("upgrade --check output missing latest version: %s", stdout.String())
 	}
 }
 

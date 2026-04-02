@@ -25,16 +25,17 @@ type File struct {
 }
 
 type Profile struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Provider     string            `json:"provider,omitempty"`
-	Command      string            `json:"command"`
-	BaseURL      string            `json:"base_url"`
-	APIKey       string            `json:"api_key"`
-	Model        string            `json:"model"`
-	FastModel    string            `json:"fast_model,omitempty"`
-	ExtraEnv     map[string]string `json:"env,omitempty"`
-	SyncExternal bool              `json:"sync_external"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Provider            string            `json:"provider,omitempty"`
+	Command             string            `json:"command"`
+	BaseURL             string            `json:"base_url"`
+	APIKey              string            `json:"api_key"`
+	Model               string            `json:"model"`
+	FastModel           string            `json:"fast_model,omitempty"`
+	ExtraEnv            map[string]string `json:"env,omitempty"`
+	SyncExternal        bool              `json:"sync_external"`
+	SyncDenyPermissions []string          `json:"sync_deny_permissions,omitempty"`
 }
 
 type Metadata struct {
@@ -158,6 +159,7 @@ func (p *Profile) normalize() {
 	p.APIKey = strings.TrimSpace(p.APIKey)
 	p.Model = strings.TrimSpace(p.Model)
 	p.FastModel = strings.TrimSpace(p.FastModel)
+	p.SyncDenyPermissions = normalizeStringList(p.SyncDenyPermissions)
 
 	if p.Command == "" {
 		p.Command = "claude"
@@ -407,4 +409,24 @@ func convertLegacyProfile(old legacyProfile) Profile {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func normalizeStringList(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

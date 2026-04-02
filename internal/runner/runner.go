@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/LiukerSun/cc-cli/internal/config"
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 type Plan struct {
@@ -91,14 +92,14 @@ func profileEnv(profile config.Profile) map[string]string {
 		}
 		env["OPENAI_API_KEY"] = profile.APIKey
 		env["OPENAI_MODEL"] = profile.Model
-		env["OPENAI_SMALL_FAST_MODEL"] = firstNonEmpty(profile.FastModel, profile.Model)
+		env["OPENAI_SMALL_FAST_MODEL"] = util.FirstNonEmpty(profile.FastModel, profile.Model)
 	default:
 		env["ANTHROPIC_BASE_URL"] = profile.BaseURL
 		env["ANTHROPIC_AUTH_TOKEN"] = profile.APIKey
 		env["ANTHROPIC_MODEL"] = profile.Model
-		env["ANTHROPIC_SMALL_FAST_MODEL"] = firstNonEmpty(profile.FastModel, profile.Model)
+		env["ANTHROPIC_SMALL_FAST_MODEL"] = util.FirstNonEmpty(profile.FastModel, profile.Model)
 		env["CLAUDE_CODE_MODEL"] = profile.Model
-		env["CLAUDE_CODE_SMALL_MODEL"] = firstNonEmpty(profile.FastModel, profile.Model)
+		env["CLAUDE_CODE_SMALL_MODEL"] = util.FirstNonEmpty(profile.FastModel, profile.Model)
 		env["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.Model
 	}
 
@@ -135,13 +136,4 @@ func envList(env map[string]string) []string {
 		out = append(out, fmt.Sprintf("%s=%s", key, env[key]))
 	}
 	return out
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

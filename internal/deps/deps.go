@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 type ToolStatus struct {
@@ -177,22 +179,12 @@ func prependNPMGlobalBinToPath() {
 		if info, err := os.Stat(candidate); err != nil || !info.IsDir() {
 			continue
 		}
-		if pathContains(currentPath, candidate) {
+		if util.PathContains(currentPath, candidate) {
 			return
 		}
 		_ = os.Setenv("PATH", candidate+string(os.PathListSeparator)+currentPath)
 		return
 	}
-}
-
-func pathContains(pathValue, target string) bool {
-	cleanTarget := filepath.Clean(target)
-	for _, entry := range filepath.SplitList(pathValue) {
-		if filepath.Clean(strings.TrimSpace(entry)) == cleanTarget {
-			return true
-		}
-	}
-	return false
 }
 
 func runCommand(name string, args ...string) (string, error) {

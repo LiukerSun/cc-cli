@@ -186,6 +186,9 @@ ccc current
 ccc profile use my-relay
 ccc profile update my-relay --model gpt-5.4-mini
 ccc profile update my-relay --env OPENAI_ORG=demo
+ccc profile duplicate my-relay --name "My Relay Backup"
+ccc profile export my-relay --output relay.json
+ccc profile import --input relay.json
 ccc profile delete my-relay
 ```
 
@@ -222,6 +225,7 @@ ccc run --env-only           # 仅注入环境变量
 ccc -y
 ccc run -y
 ccc run my-profile -y
+ccc upgrade --check
 ```
 
 不同 CLI 的处理方式：
@@ -242,7 +246,14 @@ ccc run my-profile -y
 - `CLAUDE_CODE_MODEL`
 - `CLAUDE_CODE_SMALL_MODEL`
 - `CLAUDE_CODE_SUBAGENT_MODEL`
-- `permissions.deny += Agent(Explore)`
+- `permissions.deny += <profile.sync_deny_permissions>`
+
+如需显式追加 deny 规则，可在新增或更新 profile 时传入：
+
+```bash
+ccc profile add ... --deny-permission 'Agent(Explore)'
+ccc profile update my-claude --deny-permission 'Bash(rm -rf)'
+```
 
 **codex** profile 写入 `~/.codex/config.toml` 和 `~/.codex/auth.json`，同步字段：
 
@@ -260,6 +271,16 @@ ccc run my-profile -y
 ccc sync
 ccc sync --dry-run
 ccc sync my-profile
+```
+
+兼容旧入口：
+
+```bash
+ccc --list
+ccc --add openai sk-xxx gpt-5.4
+ccc --delete my-profile
+ccc --current
+ccc -e my-profile
 ```
 
 ## 配置与目录
