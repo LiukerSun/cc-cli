@@ -200,6 +200,34 @@ func (p Profile) Validate() error {
 	return nil
 }
 
+func (f File) Redacted() File {
+	redacted := f
+	redacted.Profiles = make([]Profile, len(f.Profiles))
+	for i, profile := range f.Profiles {
+		redacted.Profiles[i] = profile.Redacted()
+	}
+	return redacted
+}
+
+func (p Profile) Redacted() Profile {
+	redacted := p
+	redacted.APIKey = MaskSecret(redacted.APIKey)
+	return redacted
+}
+
+func MaskSecret(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	runes := []rune(value)
+	if len(runes) <= 4 {
+		return "****"
+	}
+	return "****" + string(runes[len(runes)-4:])
+}
+
 func (f *File) UpsertProfile(profile Profile) error {
 	profile.normalize()
 	if err := profile.Validate(); err != nil {

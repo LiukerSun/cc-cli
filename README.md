@@ -94,6 +94,8 @@ ccc run codex-prod               # 直接运行指定 profile
 ccc run zhipu-main -- --help     # 透传参数给目标 CLI
 ccc run --dry-run                # 预览执行计划
 ccc run --env-only               # 仅注入环境变量
+ccc run --auto-install           # 缺失目标 CLI 时允许自动安装
+ccc run --auto-sync              # 运行前允许写入外部配置
 ccc -y                           # bypass 模式快捷入口
 ```
 
@@ -104,18 +106,18 @@ ccc
 ccc help
 ccc version
 ccc -y
-ccc run [profile] [--dry-run] [--env-only] [-y|--bypass] [-- cli-args...]
+ccc run [profile] [--dry-run] [--env-only] [--auto-install] [--auto-sync] [-y|--bypass] [-- cli-args...]
 ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]
 ccc current
 ccc sync [profile] [--dry-run]
-ccc profile list [--json]
+ccc profile list [--json] [--show-secrets]
 ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...
 ccc profile update <profile> [--preset ...] [--model ...]
 ccc profile use <profile>
 ccc profile delete <profile>
 ccc paths [--json]
 ccc config path
-ccc config show
+ccc config show [--show-secrets]
 ccc config migrate
 ccc doctor
 ccc upgrade [--version <semver>] [--dry-run]
@@ -142,6 +144,7 @@ ccc add
 4. **Manual input** — 手动指定 `claude` 或 `codex`、Base URL、模型等字段
 
 在线拉取模型失败时会自动回退到内置模型列表，不会因接口请求卡死。
+交互录入 API Key 时默认不回显。
 
 ### 快捷模式
 
@@ -192,6 +195,8 @@ ccc profile import --input relay.json
 ccc profile delete my-relay
 ```
 
+`ccc profile list --json` 和 `ccc config show` 默认会对 `api_key` 脱敏；只有显式加 `--show-secrets` 才会输出原值。
+
 ## 运行与选择
 
 交互选择器：
@@ -207,15 +212,25 @@ ccc run codex-prod           # 直接运行
 ccc run zhipu-main -- --help # 透传参数
 ccc run --dry-run            # 预览
 ccc run --env-only           # 仅注入环境变量
+ccc run --auto-install       # 缺失 codex/claude CLI 时自动安装
+ccc run --auto-sync          # 运行前同步 ~/.codex 或 ~/.claude
 ```
 
 `--dry-run` 展示的执行计划包括：
 
 - 选中的 profile
 - 实际运行的命令
+- 缺失 CLI 时是直接失败还是自动安装
 - 是否会同步外部配置
 - 目标 CLI 收到的参数
 - 实际注入的环境变量
+
+`ccc run` 默认不再自动安装目标 CLI，也不再隐式写入外部配置。
+需要显式副作用时：
+
+- 用 `ccc run --auto-install ...` 允许自动安装缺失的 `claude` / `codex`
+- 用 `ccc run --auto-sync ...` 在运行前写入 `~/.claude` / `~/.codex`
+- 或直接使用 `ccc sync` 单独执行配置同步
 
 ## `-y` / bypass
 
@@ -231,7 +246,7 @@ ccc upgrade --check
 不同 CLI 的处理方式：
 
 - **claude** — 注入 `CLAUDE_SKIP_PERMISSIONS=1`、`IS_SANDBOX=1`，并追加 `--dangerously-skip-permissions`
-- **codex** — 追加 `--dangerously-bypass-approvals-and-sandbox`
+- **codex** — 追加 `--yolo`
 
 > 此功能是为兼容当前 CLI 的实际行为，请确认了解风险后再使用。
 
@@ -333,7 +348,7 @@ ccc doctor
 - **claude**: Node.js `>= 18.0.0`
 - **codex**: Node.js `>= 16.0.0`
 
-目标命令不存在时，`ccc` 会在运行前检查并尝试自动安装。
+目标命令不存在时，`ccc run` 默认会直接报错；只有显式加 `--auto-install` 才会尝试自动安装。
 
 ## 升级
 

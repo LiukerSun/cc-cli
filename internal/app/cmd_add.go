@@ -114,7 +114,7 @@ type addProfileOptions struct {
 func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
 	fmt.Fprintln(stdout, "ccc add")
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Interactive model configuration")
+	fmt.Fprintln(stdout, "Interactive profile configuration")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "  1) ZAI / ZHIPU AI")
 	fmt.Fprintln(stdout, "  2) Alibaba Coding Plan")
@@ -130,24 +130,24 @@ func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.S
 
 	switch choice {
 	case 1:
-		return runAddZhipuInteractive(reader, stdout, stderr, store, initial)
+		return runAddZhipuInteractive(stdin, reader, stdout, stderr, store, initial)
 	case 2:
-		return runAddAlibabaInteractive(reader, stdout, stderr, store, initial)
+		return runAddAlibabaInteractive(stdin, reader, stdout, stderr, store, initial)
 	case 3:
-		return runAddCodexInteractive(reader, stdout, stderr, store, initial)
+		return runAddCodexInteractive(stdin, reader, stdout, stderr, store, initial)
 	case 4:
-		return runAddManualInteractive(reader, stdout, stderr, store, initial)
+		return runAddManualInteractive(stdin, reader, stdout, stderr, store, initial)
 	default:
 		fmt.Fprintf(stderr, "invalid choice %d\n", choice)
 		return 1
 	}
 }
 
-func runAddZhipuInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+func runAddZhipuInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "ZAI / ZHIPU AI")
 
-	apiKey, err := promptRequired(reader, stdout, "API key")
+	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
 		return 1
@@ -189,11 +189,11 @@ func runAddZhipuInteractive(reader *bufio.Reader, stdout, stderr io.Writer, stor
 	})
 }
 
-func runAddAlibabaInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+func runAddAlibabaInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Alibaba Coding Plan")
 
-	apiKey, err := promptRequired(reader, stdout, "API key")
+	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
 		return 1
@@ -236,7 +236,7 @@ func runAddAlibabaInteractive(reader *bufio.Reader, stdout, stderr io.Writer, st
 	})
 }
 
-func runAddCodexInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+func runAddCodexInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "OpenAI Codex")
 
@@ -245,7 +245,7 @@ func runAddCodexInteractive(reader *bufio.Reader, stdout, stderr io.Writer, stor
 		fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
 		return 1
 	}
-	apiKey, err := promptRequired(reader, stdout, "API key")
+	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
 		return 1
@@ -277,7 +277,7 @@ func runAddCodexInteractive(reader *bufio.Reader, stdout, stderr io.Writer, stor
 	})
 }
 
-func runAddManualInteractive(reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+func runAddManualInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Manual configuration")
 
@@ -302,7 +302,7 @@ func runAddManualInteractive(reader *bufio.Reader, stdout, stderr io.Writer, sto
 		fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
 		return 1
 	}
-	apiKey, err := promptRequired(reader, stdout, "API key")
+	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
 		return 1

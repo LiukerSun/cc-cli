@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -105,7 +106,7 @@ func normalizeCompatibilityArgs(args []string) []string {
 
 func isTopLevelRunShortcut(arg string) bool {
 	switch arg {
-	case "-y", "--bypass", "--dry-run", "--env-only", "--":
+	case "-y", "--bypass", "--dry-run", "--env-only", "--auto-install", "--auto-sync", "--":
 		return true
 	default:
 		return false
@@ -137,25 +138,40 @@ func runConfig(stdout, stderr io.Writer, home string, layout platform.Layout, re
 		fmt.Fprintln(stdout, report.ConfigFile)
 		return 0
 	}
-	if len(args) == 1 && args[0] == "show" {
-		return runConfigShow(stdout, stderr, home, layout)
+	if len(args) >= 1 && args[0] == "show" {
+		return runConfigShow(stdout, stderr, home, layout, args[1:])
 	}
 	if len(args) == 1 && args[0] == "migrate" {
 		return runConfigMigrate(stdout, stderr, home, layout)
 	}
 
 	fmt.Fprintln(stderr, "usage: ccc config path")
-	fmt.Fprintln(stderr, "       ccc config show")
+	fmt.Fprintln(stderr, "       ccc config show [--show-secrets]")
 	fmt.Fprintln(stderr, "       ccc config migrate")
 	return 1
 }
 
-func runConfigShow(stdout, stderr io.Writer, home string, layout platform.Layout) int {
+func runConfigShow(stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {
+	fs := flag.NewFlagSet("config show", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	showSecrets := fs.Bool("show-secrets", false, "show API keys in config output")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(stderr, "failed to parse flags: %v\n", err)
+		return 1
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: ccc config show [--show-secrets]")
+		return 1
+	}
+
 	store := config.NewStore(home, layout)
 	cfg, meta, err := store.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to load config: %v\n", err)
 		return 1
+	}
+	if !*showSecrets {
+		cfg = cfg.Redacted()
 	}
 
 	payload := struct {
@@ -252,7 +268,7 @@ func runDoctor(stdout, stderr io.Writer, home string, layout platform.Layout, re
 		if ok {
 			fmt.Fprintf(stdout, "- current profile: %s (%s)\n", currentProfile.Name, currentProfile.Command)
 			if _, err := exec.LookPath(currentProfile.Command); err != nil {
-				warnings = append(warnings, fmt.Sprintf("Current profile command %q is not available on PATH.", currentProfile.Command))
+				warnings = append(warnings, fmt.Sprintf("Current profile command %q is not available on PATH. Install it first or use 'ccc run --auto-install'.", currentProfile.Command))
 			}
 		} else {
 			warnings = append(warnings, fmt.Sprintf("Current profile %q is missing from config.", cfg.CurrentProfile))
@@ -294,16 +310,16 @@ func runDoctor(stdout, stderr io.Writer, home string, layout platform.Layout, re
 func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "ccc")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Go refactor bootstrap for the next-generation cc-cli.")
+	fmt.Fprintln(w, "Profile manager and launcher for Claude/Codex-compatible CLIs.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  ccc help")
 	fmt.Fprintln(w, "  ccc version")
 	fmt.Fprintln(w, "  ccc current")
 	fmt.Fprintln(w, "  ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]")
-	fmt.Fprintln(w, "  ccc run [profile-id-or-name] [--dry-run] [--env-only] [-y|--bypass] [-- cli-args...]")
+	fmt.Fprintln(w, "  ccc run [profile-id-or-name] [--dry-run] [--env-only] [--auto-install] [--auto-sync] [-y|--bypass] [-- cli-args...]")
 	fmt.Fprintln(w, "  ccc sync [profile-id-or-name] [--dry-run]")
-	fmt.Fprintln(w, "  ccc profile list [--json]")
+	fmt.Fprintln(w, "  ccc profile list [--json] [--show-secrets]")
 	fmt.Fprintln(w, "  ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...")
 	fmt.Fprintln(w, "  ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba] [--model ...]")
 	fmt.Fprintln(w, "  ccc profile duplicate <profile-id-or-name> [--name ...] [--id ...]")
@@ -313,7 +329,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc profile delete <profile-id-or-name>")
 	fmt.Fprintln(w, "  ccc paths [--json]")
 	fmt.Fprintln(w, "  ccc config path")
-	fmt.Fprintln(w, "  ccc config show")
+	fmt.Fprintln(w, "  ccc config show [--show-secrets]")
 	fmt.Fprintln(w, "  ccc config migrate")
 	fmt.Fprintln(w, "  ccc doctor")
 	fmt.Fprintln(w, "  ccc upgrade [--version <semver>] [--check] [--dry-run]")
@@ -328,7 +344,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc -e [profile-id-or-name]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Notes:")
-	fmt.Fprintln(w, "  ccc without arguments opens the model selector and runs the selected model.")
+	fmt.Fprintln(w, "  ccc without arguments opens the profile selector and runs the selected profile.")
 	fmt.Fprintln(w, "  ccc run without a profile opens an interactive selector when used in a terminal.")
 }
 

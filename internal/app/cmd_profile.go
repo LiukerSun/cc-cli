@@ -49,8 +49,13 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 	fs := flag.NewFlagSet("profile list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOutput := fs.Bool("json", false, "print JSON")
+	showSecrets := fs.Bool("show-secrets", false, "show API keys in output")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(stderr, "failed to parse flags: %v\n", err)
+		return 1
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: ccc profile list [--json] [--show-secrets]")
 		return 1
 	}
 
@@ -65,12 +70,19 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 	})
 
 	if *jsonOutput {
+		profiles := append([]config.Profile(nil), cfg.Profiles...)
+		if !*showSecrets {
+			profiles = make([]config.Profile, len(cfg.Profiles))
+			for i, profile := range cfg.Profiles {
+				profiles[i] = profile.Redacted()
+			}
+		}
 		payload := struct {
 			Metadata config.Metadata  `json:"metadata"`
 			Profiles []config.Profile `json:"profiles"`
 		}{
 			Metadata: meta,
-			Profiles: cfg.Profiles,
+			Profiles: profiles,
 		}
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")

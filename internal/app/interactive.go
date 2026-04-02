@@ -5,7 +5,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"golang.org/x/term"
 )
+
+type fileDescriptorInput interface {
+	Fd() uintptr
+}
+
+var secretInputSupported = supportsHiddenSecretInput
+var readSecretInput = readHiddenSecretInput
 
 func promptRequired(reader *bufio.Reader, stdout io.Writer, label string) (string, error) {
 	for {
@@ -38,6 +47,27 @@ func promptWithDefault(reader *bufio.Reader, stdout io.Writer, label, defaultVal
 		return defaultValue, nil
 	}
 	return value, nil
+}
+
+func promptSecretRequired(stdin io.Reader, reader *bufio.Reader, stdout io.Writer, label string) (string, error) {
+	for {
+		value, err := promptSecret(stdin, reader, stdout, label)
+		if err != nil {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value, nil
+		}
+		fmt.Fprintf(stdout, "%s is required.\n", label)
+	}
+}
+
+func promptSecret(stdin io.Reader, reader *bufio.Reader, stdout io.Writer, label string) (string, error) {
+	if secretInputSupported(stdin) {
+		return readSecretInput(stdin, stdout, label)
+	}
+	return promptWithDefault(reader, stdout, label, "")
 }
 
 func promptChoice(reader *bufio.Reader, stdout io.Writer, label string, max int) (int, error) {
@@ -121,4 +151,27 @@ func resolveModelChoice(reader *bufio.Reader, stdout io.Writer, choices []string
 	}
 	_ = kind
 	return model, nil
+}
+
+func supportsHiddenSecretInput(stdin io.Reader) bool {
+	input, ok := stdin.(fileDescriptorInput)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(input.Fd()))
+}
+
+func readHiddenSecretInput(stdin io.Reader, stdout io.Writer, label string) (string, error) {
+	input, ok := stdin.(fileDescriptorInput)
+	if !ok {
+		return "", fmt.Errorf("hidden input is not available")
+	}
+
+	fmt.Fprintf(stdout, "%s: ", label)
+	line, err := term.ReadPassword(int(input.Fd()))
+	fmt.Fprintln(stdout)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(line)), nil
 }

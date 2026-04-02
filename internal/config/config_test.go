@@ -180,3 +180,34 @@ func TestReplaceProfileUpdatesCurrentProfileID(t *testing.T) {
 		t.Fatalf("profile.Name = %q", profile.Name)
 	}
 }
+
+func TestRedactedMasksAPIKeys(t *testing.T) {
+	cfg := DefaultFile()
+	if err := cfg.UpsertProfile(Profile{
+		ID:      "demo",
+		Name:    "Demo",
+		Command: "codex",
+		BaseURL: "https://relay.example.com/v1",
+		APIKey:  "sk-secret-1234",
+		Model:   "gpt-5.4",
+	}); err != nil {
+		t.Fatalf("UpsertProfile: %v", err)
+	}
+
+	redacted := cfg.Redacted()
+	profile, ok := redacted.FindProfile("demo")
+	if !ok {
+		t.Fatal("expected redacted profile to exist")
+	}
+	if profile.APIKey != "****1234" {
+		t.Fatalf("profile.APIKey = %q, want ****1234", profile.APIKey)
+	}
+
+	original, ok := cfg.FindProfile("demo")
+	if !ok {
+		t.Fatal("expected original profile to exist")
+	}
+	if original.APIKey != "sk-secret-1234" {
+		t.Fatalf("original APIKey = %q, want sk-secret-1234", original.APIKey)
+	}
+}
