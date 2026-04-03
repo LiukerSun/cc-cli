@@ -82,6 +82,7 @@ ccc
 - **一键切换并运行** — `ccc` 即可进入选择和执行流程
 - **交互式选择器** — 方向键上/下或 `j`/`k`，`Enter` 运行，`q` 退出
 - **快捷录入** — 支持 `ccc add openai sk-xxx [model]` 等脚本友好写法
+- **Shell 补全** — 支持导出 Bash / Zsh / Fish / PowerShell 补全脚本
 - **自动同步外部配置** — 运行前写入 `~/.claude` 或 `~/.codex`
 - **自动检查依赖** — 缺少 `claude` / `codex` 时尝试自动安装
 - **bypass 支持** — 需要时可进入最宽松运行模式
@@ -107,6 +108,7 @@ ccc help
 ccc version
 ccc -y
 ccc run [profile] [--dry-run] [--env-only] [--auto-install] [--auto-sync] [-y|--bypass] [-- cli-args...]
+ccc completion <bash|zsh|fish|powershell>
 ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]
 ccc current
 ccc sync [profile] [--dry-run]
@@ -127,6 +129,36 @@ ccc upgrade [--version <semver>] [--dry-run]
 > - `ccc -y` 是 `ccc run -y` 的顶层快捷方式
 > - `ccc run foo -- --help` 会把 `--help` 透传给目标 CLI
 > - `ccc --help` / `ccc --version` 作为兼容别名保留
+
+## Shell 补全
+
+生成补全脚本：
+
+```bash
+ccc completion bash
+ccc completion zsh
+ccc completion fish
+ccc completion powershell
+```
+
+常见用法：
+
+```bash
+# Bash
+source <(ccc completion bash)
+
+# Zsh
+source <(ccc completion zsh)
+
+# Fish
+ccc completion fish | source
+```
+
+PowerShell:
+
+```powershell
+ccc completion powershell | Out-String | Invoke-Expression
+```
 
 ## 添加配置
 

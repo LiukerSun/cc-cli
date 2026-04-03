@@ -55,10 +55,13 @@ func applyClaude(home string, profile config.Profile) (Result, error) {
 	envMap := ensureMap(doc, "env")
 	fastModel := util.FirstNonEmpty(profile.FastModel, profile.Model)
 	envMap["ANTHROPIC_MODEL"] = profile.Model
+	envMap["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = fastModel
 	envMap["ANTHROPIC_SMALL_FAST_MODEL"] = fastModel
 	envMap["CLAUDE_CODE_MODEL"] = profile.Model
 	envMap["CLAUDE_CODE_SMALL_MODEL"] = fastModel
-	envMap["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.Model
+	if profile.SubagentModel != "" {
+		envMap["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.SubagentModel
+	}
 	doc["model"] = profile.Model
 
 	if len(profile.SyncDenyPermissions) > 0 {

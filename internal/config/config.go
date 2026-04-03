@@ -33,6 +33,7 @@ type Profile struct {
 	APIKey              string            `json:"api_key"`
 	Model               string            `json:"model"`
 	FastModel           string            `json:"fast_model,omitempty"`
+	SubagentModel       string            `json:"subagent_model,omitempty"`
 	ExtraEnv            map[string]string `json:"env,omitempty"`
 	SyncExternal        bool              `json:"sync_external"`
 	SyncDenyPermissions []string          `json:"sync_deny_permissions,omitempty"`
@@ -159,6 +160,7 @@ func (p *Profile) normalize() {
 	p.APIKey = strings.TrimSpace(p.APIKey)
 	p.Model = strings.TrimSpace(p.Model)
 	p.FastModel = strings.TrimSpace(p.FastModel)
+	p.SubagentModel = strings.TrimSpace(p.SubagentModel)
 	p.SyncDenyPermissions = normalizeStringList(p.SyncDenyPermissions)
 
 	if p.Command == "" {

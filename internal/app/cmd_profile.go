@@ -115,6 +115,9 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 		if profile.FastModel != "" {
 			fmt.Fprintf(stdout, "  Fast model: %s\n", profile.FastModel)
 		}
+		if profile.SubagentModel != "" {
+			fmt.Fprintf(stdout, "  Subagent model: %s\n", profile.SubagentModel)
+		}
 	}
 	return 0
 }
@@ -132,6 +135,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 	apiKey := fs.String("api-key", "", "API key")
 	model := fs.String("model", "", "main model")
 	fastModel := fs.String("fast-model", "", "fast model")
+	subagentModel := fs.String("subagent-model", "", "subagent model (optional, overrides default subagent routing)")
 	noSync := fs.Bool("no-sync", false, "disable external sync")
 	envVars := kvFlag{}
 	denyPermissions := stringListFlag{}
@@ -156,6 +160,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 		APIKey:              *apiKey,
 		Model:               *model,
 		FastModel:           *fastModel,
+		SubagentModel:       *subagentModel,
 		NoSync:              *noSync,
 		EnvVars:             envVars.values,
 		SyncDenyPermissions: denyPermissions.values,
@@ -181,6 +186,7 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 	apiKey := fs.String("api-key", "", "API key")
 	model := fs.String("model", "", "main model")
 	fastModel := fs.String("fast-model", "", "fast model")
+	subagentModel := fs.String("subagent-model", "", "subagent model (optional, overrides default subagent routing)")
 	clearEnv := fs.Bool("clear-env", false, "remove all extra env entries before applying updates")
 	clearDenyPermissions := fs.Bool("clear-deny-permissions", false, "remove all configured sync deny permissions")
 	sync := boolFlag{}
@@ -259,6 +265,9 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 	}
 	if strings.TrimSpace(*fastModel) != "" {
 		profile.FastModel = strings.TrimSpace(*fastModel)
+	}
+	if strings.TrimSpace(*subagentModel) != "" {
+		profile.SubagentModel = strings.TrimSpace(*subagentModel)
 	}
 	if *clearEnv {
 		profile.ExtraEnv = map[string]string{}

@@ -64,6 +64,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runAdd(stdout, stderr, home, layout, args[1:])
 	case "run":
 		return runRun(stdout, stderr, home, layout, args[1:])
+	case "completion":
+		return runCompletion(stdout, stderr, args[1:])
+	case "__complete":
+		return runInternalComplete(stdout, stderr, home, layout, args[1:])
 	case "sync":
 		return runSync(stdout, stderr, home, layout, args[1:])
 	case "profile":
@@ -318,6 +322,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc current")
 	fmt.Fprintln(w, "  ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]")
 	fmt.Fprintln(w, "  ccc run [profile-id-or-name] [--dry-run] [--env-only] [--auto-install] [--auto-sync] [-y|--bypass] [-- cli-args...]")
+	fmt.Fprintln(w, "  ccc completion <bash|zsh|fish|powershell>")
 	fmt.Fprintln(w, "  ccc sync [profile-id-or-name] [--dry-run]")
 	fmt.Fprintln(w, "  ccc profile list [--json] [--show-secrets]")
 	fmt.Fprintln(w, "  ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...")

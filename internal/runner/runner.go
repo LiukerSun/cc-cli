@@ -97,10 +97,14 @@ func profileEnv(profile config.Profile) map[string]string {
 		env["ANTHROPIC_BASE_URL"] = profile.BaseURL
 		env["ANTHROPIC_AUTH_TOKEN"] = profile.APIKey
 		env["ANTHROPIC_MODEL"] = profile.Model
-		env["ANTHROPIC_SMALL_FAST_MODEL"] = util.FirstNonEmpty(profile.FastModel, profile.Model)
+		fastModel := util.FirstNonEmpty(profile.FastModel, profile.Model)
+		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = fastModel
+		env["ANTHROPIC_SMALL_FAST_MODEL"] = fastModel
 		env["CLAUDE_CODE_MODEL"] = profile.Model
-		env["CLAUDE_CODE_SMALL_MODEL"] = util.FirstNonEmpty(profile.FastModel, profile.Model)
-		env["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.Model
+		env["CLAUDE_CODE_SMALL_MODEL"] = fastModel
+		if profile.SubagentModel != "" {
+			env["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.SubagentModel
+		}
 	}
 
 	return env

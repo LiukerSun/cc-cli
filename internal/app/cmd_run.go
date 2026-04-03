@@ -45,6 +45,9 @@ func runCurrent(stdout, stderr io.Writer, home string, layout platform.Layout) i
 	if profile.FastModel != "" {
 		fmt.Fprintf(stdout, "Fast model: %s\n", profile.FastModel)
 	}
+	if profile.SubagentModel != "" {
+		fmt.Fprintf(stdout, "Subagent model: %s\n", profile.SubagentModel)
+	}
 	return 0
 }
 

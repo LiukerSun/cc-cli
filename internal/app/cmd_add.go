@@ -27,6 +27,7 @@ func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 	apiKey := fs.String("api-key", "", "API key")
 	model := fs.String("model", "", "main model")
 	fastModel := fs.String("fast-model", "", "fast model")
+	subagentModel := fs.String("subagent-model", "", "subagent model (optional, overrides default subagent routing)")
 	noSync := fs.Bool("no-sync", false, "disable external sync")
 	envVars := kvFlag{}
 	denyPermissions := stringListFlag{}
@@ -74,6 +75,7 @@ func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 			BaseURL:             *baseURL,
 			Model:               *model,
 			FastModel:           *fastModel,
+			SubagentModel:       *subagentModel,
 			NoSync:              *noSync,
 			EnvVars:             envVars.values,
 			SyncDenyPermissions: denyPermissions.values,
@@ -106,6 +108,7 @@ type addProfileOptions struct {
 	APIKey              string
 	Model               string
 	FastModel           string
+	SubagentModel       string
 	NoSync              bool
 	EnvVars             map[string]string
 	SyncDenyPermissions []string
@@ -170,6 +173,7 @@ func runAddZhipuInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stder
 		return 1
 	}
 
+	subagentModel, _ := promptWithDefault(reader, stdout, "Subagent model (optional, press Enter to skip)", "")
 	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("ZHIPU (%s)", mainModel))
 	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
 	if err != nil {
@@ -178,14 +182,15 @@ func runAddZhipuInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stder
 	}
 
 	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:       name,
-		ID:         initial.ID,
-		PresetName: "zhipu",
-		APIKey:     apiKey,
-		Model:      mainModel,
-		FastModel:  fastModel,
-		NoSync:     initial.NoSync,
-		EnvVars:    initial.EnvVars,
+		Name:          name,
+		ID:            initial.ID,
+		PresetName:    "zhipu",
+		APIKey:        apiKey,
+		Model:         mainModel,
+		FastModel:     fastModel,
+		SubagentModel: subagentModel,
+		NoSync:        initial.NoSync,
+		EnvVars:       initial.EnvVars,
 	})
 }
 
@@ -322,21 +327,27 @@ func runAddManualInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stde
 		}
 	}
 
+	var subagentModel string
+	if command == "claude" {
+		subagentModel, _ = promptWithDefault(reader, stdout, "Subagent model (optional, press Enter to skip)", "")
+	}
+
 	if command == "codex" {
 		baseURL = util.NormalizeCodexBaseURL(baseURL)
 	}
 
 	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:      name,
-		ID:        initial.ID,
-		Command:   command,
-		Provider:  util.FirstNonEmpty(initial.Provider, "custom"),
-		BaseURL:   baseURL,
-		APIKey:    apiKey,
-		Model:     model,
-		FastModel: fastModel,
-		NoSync:    initial.NoSync,
-		EnvVars:   initial.EnvVars,
+		Name:          name,
+		ID:            initial.ID,
+		Command:       command,
+		Provider:      util.FirstNonEmpty(initial.Provider, "custom"),
+		BaseURL:       baseURL,
+		APIKey:        apiKey,
+		Model:         model,
+		FastModel:     fastModel,
+		SubagentModel: subagentModel,
+		NoSync:        initial.NoSync,
+		EnvVars:       initial.EnvVars,
 	})
 }
 
@@ -356,6 +367,7 @@ func addProfile(stdout, stderr io.Writer, store config.Store, options addProfile
 		APIKey:              strings.TrimSpace(options.APIKey),
 		Model:               strings.TrimSpace(options.Model),
 		FastModel:           strings.TrimSpace(options.FastModel),
+		SubagentModel:       strings.TrimSpace(options.SubagentModel),
 		ExtraEnv:            options.EnvVars,
 		SyncExternal:        !options.NoSync,
 		SyncDenyPermissions: append([]string(nil), options.SyncDenyPermissions...),

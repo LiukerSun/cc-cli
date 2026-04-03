@@ -930,6 +930,100 @@ func TestConfigMigrateWritesCurrentConfig(t *testing.T) {
 	}
 }
 
+func TestCompletionBashOutputsScript(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{"completion", "bash"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("completion bash exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "complete -o default -F _ccc_completion ccc") {
+		t.Fatalf("bash completion output missing complete hook: %s", output)
+	}
+	if !strings.Contains(output, "ccc __complete") {
+		t.Fatalf("bash completion output missing __complete bridge: %s", output)
+	}
+}
+
+func TestInternalCompleteTopLevelCommands(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{"__complete"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("__complete exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "completion\n") {
+		t.Fatalf("completion output missing completion command: %s", output)
+	}
+	if !strings.Contains(output, "run\n") {
+		t.Fatalf("completion output missing run command: %s", output)
+	}
+}
+
+func TestInternalCompleteRunProfiles(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Codex Relay",
+		"--command", "codex",
+		"--base-url", "https://relay.example.com/v1",
+		"--api-key", "sk-test",
+		"--model", "gpt-5.4",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"__complete", "run", ""}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("__complete run exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "codex-relay\n") {
+		t.Fatalf("completion output missing profile id: %s", output)
+	}
+	if !strings.Contains(output, "--auto-sync\n") {
+		t.Fatalf("completion output missing run flag: %s", output)
+	}
+}
+
+func TestInternalCompleteProfileUpdateIdentifiers(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Claude Main",
+		"--command", "claude",
+		"--base-url", "https://api.anthropic.com",
+		"--api-key", "token",
+		"--model", "claude-main",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"__complete", "profile", "update", ""}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("__complete profile update exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "claude-main\n") {
+		t.Fatalf("completion output missing profile id: %s", stdout.String())
+	}
+}
+
 func TestRunDryRunUsesCurrentProfile(t *testing.T) {
 	setupTestHome(t)
 

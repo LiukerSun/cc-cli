@@ -44,3 +44,7 @@ dist/
 # Claude Code local settings
 .claude/
 .codex
+
+# OpenSpec (local project specs)
+openspec/
+/go
