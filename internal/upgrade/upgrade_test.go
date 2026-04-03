@@ -2,11 +2,13 @@ package upgrade
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -108,22 +110,120 @@ func TestUpgradeReplacesUnixBinary(t *testing.T) {
 	}
 }
 
-func TestUpgradeRejectsWindowsSelfReplace(t *testing.T) {
+func TestUpgradeReplacesWindowsBinary(t *testing.T) {
+	archiveBytes := makeZipArchive(t, "ccc.exe", []byte("upgraded windows binary\n"))
+	sum := sha256.Sum256(archiveBytes)
+	checksums := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), "ccc_windows_amd64.zip")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/LiukerSun/cc-cli/releases/download/v2.2.1/ccc_windows_amd64.zip":
+			_, _ = w.Write(archiveBytes)
+		case "/LiukerSun/cc-cli/releases/download/v2.2.1/checksums.txt":
+			_, _ = io.WriteString(w, checksums)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	executablePath := filepath.Join(t.TempDir(), "ccc.exe")
+	if err := os.WriteFile(executablePath, []byte("old windows binary\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile executable: %v", err)
+	}
+
+	originalCleanup := scheduleWindowsCleanupFile
+	defer func() {
+		scheduleWindowsCleanupFile = originalCleanup
+	}()
+
+	var scheduledPath string
+	scheduleWindowsCleanupFile = func(path string) error {
+		scheduledPath = path
+		return os.Remove(path)
+	}
+
 	manager := Manager{
 		RepoOwner:       defaultRepoOwner,
 		RepoName:        defaultRepoName,
 		ProjectName:     defaultProjectName,
 		CurrentVersion:  "2.2.0",
-		ExecutablePath:  `C:\ccc.exe`,
+		ExecutablePath:  executablePath,
 		GOOS:            "windows",
 		GOARCH:          "amd64",
-		APIBaseURL:      "https://api.github.com",
-		DownloadBaseURL: "https://github.com/LiukerSun/cc-cli/releases/download",
+		APIBaseURL:      server.URL,
+		DownloadBaseURL: server.URL + "/LiukerSun/cc-cli/releases/download",
+		HTTPClient:      server.Client(),
 	}
 
-	err := manager.Upgrade(context.Background(), Plan{ExecutablePath: manager.ExecutablePath})
-	if err == nil || !strings.Contains(err.Error(), "not supported on Windows") {
-		t.Fatalf("Upgrade() error = %v", err)
+	plan, err := manager.Plan(context.Background(), "2.2.1")
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if err := manager.Upgrade(context.Background(), plan); err != nil {
+		t.Fatalf("Upgrade: %v", err)
+	}
+
+	data, err := os.ReadFile(executablePath)
+	if err != nil {
+		t.Fatalf("ReadFile executable: %v", err)
+	}
+	if !strings.Contains(string(data), "upgraded windows binary") {
+		t.Fatalf("upgraded executable content mismatch: %s", string(data))
+	}
+
+	if scheduledPath != executablePath+".old" {
+		t.Fatalf("scheduled cleanup path = %q, want %q", scheduledPath, executablePath+".old")
+	}
+	if _, err := os.Stat(executablePath + ".old"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("backup file should be cleaned up, stat err = %v", err)
+	}
+}
+
+func TestReplaceExecutableWindowsRestoresOriginalOnSwapFailure(t *testing.T) {
+	executablePath := filepath.Join(t.TempDir(), "ccc.exe")
+	if err := os.WriteFile(executablePath, []byte("old windows binary\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile executable: %v", err)
+	}
+
+	originalRename := renameFile
+	originalCleanup := scheduleWindowsCleanupFile
+	defer func() {
+		renameFile = originalRename
+		scheduleWindowsCleanupFile = originalCleanup
+	}()
+
+	renameCalls := 0
+	renameFile = func(oldPath, newPath string) error {
+		renameCalls++
+		switch renameCalls {
+		case 1, 3:
+			return os.Rename(oldPath, newPath)
+		case 2:
+			return errors.New("swap failed")
+		default:
+			return os.Rename(oldPath, newPath)
+		}
+	}
+	scheduleWindowsCleanupFile = func(path string) error {
+		t.Fatalf("cleanup should not be scheduled when swap fails")
+		return nil
+	}
+
+	err := replaceExecutable(executablePath, []byte("new windows binary\n"), "windows")
+	if err == nil || !strings.Contains(err.Error(), "replace executable") {
+		t.Fatalf("replaceExecutable() error = %v", err)
+	}
+
+	data, readErr := os.ReadFile(executablePath)
+	if readErr != nil {
+		t.Fatalf("ReadFile executable: %v", readErr)
+	}
+	if !strings.Contains(string(data), "old windows binary") {
+		t.Fatalf("original executable should be restored, got: %s", string(data))
+	}
+	if _, statErr := os.Stat(executablePath + ".old"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("backup file should be restored away, stat err = %v", statErr)
 	}
 }
 
@@ -150,6 +250,26 @@ func makeTarGzArchive(t *testing.T, name string, content []byte) []byte {
 	}
 	if err := gzWriter.Close(); err != nil {
 		t.Fatalf("Close gzWriter: %v", err)
+	}
+
+	return archive.Bytes()
+}
+
+func makeZipArchive(t *testing.T, name string, content []byte) []byte {
+	t.Helper()
+
+	var archive bytes.Buffer
+	zipWriter := zip.NewWriter(&archive)
+
+	fileWriter, err := zipWriter.Create(name)
+	if err != nil {
+		t.Fatalf("Create zip entry: %v", err)
+	}
+	if _, err := fileWriter.Write(content); err != nil {
+		t.Fatalf("Write zip entry: %v", err)
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatalf("Close zipWriter: %v", err)
 	}
 
 	return archive.Bytes()

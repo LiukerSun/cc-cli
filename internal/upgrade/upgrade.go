@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +24,12 @@ const (
 	defaultRepoOwner   = "LiukerSun"
 	defaultRepoName    = "cc-cli"
 	defaultProjectName = "ccc"
+)
+
+var (
+	renameFile                 = os.Rename
+	removeFile                 = os.Remove
+	scheduleWindowsCleanupFile = defaultScheduleWindowsCleanupFile
 )
 
 type Manager struct {
@@ -125,10 +132,6 @@ func (m Manager) Plan(ctx context.Context, requestedVersion string) (Plan, error
 }
 
 func (m Manager) Upgrade(ctx context.Context, plan Plan) error {
-	if m.GOOS == "windows" {
-		return errors.New("self-upgrade is not supported on Windows yet; rerun install.ps1 for the target version")
-	}
-
 	archiveBytes, err := m.download(ctx, plan.AssetURL)
 	if err != nil {
 		return fmt.Errorf("download archive: %w", err)
@@ -149,7 +152,7 @@ func (m Manager) Upgrade(ctx context.Context, plan Plan) error {
 	if err != nil {
 		return err
 	}
-	if err := replaceExecutable(plan.ExecutablePath, binary); err != nil {
+	if err := replaceExecutable(plan.ExecutablePath, binary, m.GOOS); err != nil {
 		return err
 	}
 	return nil
@@ -287,7 +290,7 @@ func extractZip(archiveBytes []byte, binaryName string) ([]byte, error) {
 	return nil, fmt.Errorf("archive did not contain %s", binaryName)
 }
 
-func replaceExecutable(executablePath string, binary []byte) error {
+func replaceExecutable(executablePath string, binary []byte, goos string) error {
 	info, err := os.Stat(executablePath)
 	if err != nil {
 		return fmt.Errorf("stat executable: %w", err)
@@ -299,12 +302,55 @@ func replaceExecutable(executablePath string, binary []byte) error {
 		return fmt.Errorf("write upgraded binary: %w", err)
 	}
 	if err := os.Chmod(tmpPath, info.Mode()); err != nil {
-		_ = os.Remove(tmpPath)
+		_ = removeFile(tmpPath)
 		return fmt.Errorf("chmod upgraded binary: %w", err)
 	}
-	if err := os.Rename(tmpPath, executablePath); err != nil {
-		_ = os.Remove(tmpPath)
+	if goos == "windows" {
+		return replaceWindowsExecutable(executablePath, tmpPath)
+	}
+	if err := renameFile(tmpPath, executablePath); err != nil {
+		_ = removeFile(tmpPath)
 		return fmt.Errorf("replace executable: %w", err)
 	}
 	return nil
+}
+
+func replaceWindowsExecutable(executablePath, tmpPath string) error {
+	backupPath := executablePath + ".old"
+	if err := removeIfExists(backupPath); err != nil {
+		_ = removeFile(tmpPath)
+		return fmt.Errorf("remove stale backup: %w", err)
+	}
+
+	if err := renameFile(executablePath, backupPath); err != nil {
+		_ = removeFile(tmpPath)
+		return fmt.Errorf("backup executable: %w", err)
+	}
+
+	if err := renameFile(tmpPath, executablePath); err != nil {
+		_ = removeFile(tmpPath)
+		if restoreErr := renameFile(backupPath, executablePath); restoreErr != nil {
+			return fmt.Errorf("replace executable: %w (restore original: %v)", err, restoreErr)
+		}
+		return fmt.Errorf("replace executable: %w", err)
+	}
+
+	// The upgrade already succeeded; a cleanup failure should not leave the
+	// user without the new binary.
+	_ = scheduleWindowsCleanupFile(backupPath)
+
+	return nil
+}
+
+func removeIfExists(path string) error {
+	err := removeFile(path)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func defaultScheduleWindowsCleanupFile(path string) error {
+	cmd := exec.Command("cmd", "/c", fmt.Sprintf("ping 127.0.0.1 -n 3 >NUL && del /f /q \"%s\"", path))
+	return cmd.Start()
 }

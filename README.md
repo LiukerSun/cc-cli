@@ -390,8 +390,8 @@ ccc upgrade                       # 执行升级
 ccc upgrade --version 2.5.6       # 升级到指定版本
 ```
 
-- Unix 平台支持原地升级
-- Windows 建议重新执行 `install.ps1`
+- Linux / macOS / Windows 均支持原地升级
+- Windows 升级后如果当前终端仍显示旧版本，重开终端即可
 
 ## 开发
 

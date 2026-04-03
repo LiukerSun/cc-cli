@@ -70,9 +70,6 @@ func runUpgrade(stdout, stderr io.Writer, args []string) int {
 		fmt.Fprintf(stdout, "Download URL: %s\n", plan.AssetURL)
 		fmt.Fprintf(stdout, "Checksums URL: %s\n", plan.ChecksumsURL)
 		fmt.Fprintf(stdout, "Executable path: %s\n", plan.ExecutablePath)
-		if runtime.GOOS == "windows" {
-			fmt.Fprintln(stdout, "Note: Windows currently requires reinstalling via install.ps1 instead of in-place self-upgrade.")
-		}
 		return 0
 	}
 
@@ -88,5 +85,8 @@ func runUpgrade(stdout, stderr io.Writer, args []string) int {
 
 	fmt.Fprintf(stdout, "Upgraded ccc from %s to %s\n", plan.CurrentVersion, plan.TargetVersion)
 	fmt.Fprintf(stdout, "Executable updated at %s\n", plan.ExecutablePath)
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(stdout, "Restart your terminal if it still reports the previous version.")
+	}
 	return 0
 }
