@@ -108,3 +108,32 @@ func TestEnvListStableOrder(t *testing.T) {
 		t.Fatalf("envList order = %q", got)
 	}
 }
+
+func TestCommandEnvRemovesStaleManagedClaudeVars(t *testing.T) {
+	t.Setenv("ANTHROPIC_MODEL", "stale-model")
+	t.Setenv("CLAUDE_CODE_SUBAGENT_MODEL", "glm-5")
+
+	env := commandEnv(Plan{
+		Command: "claude",
+		Env: map[string]string{
+			"ANTHROPIC_MODEL":   "claude-main",
+			"CLAUDE_CODE_MODEL": "claude-main",
+		},
+	})
+
+	values := map[string]string{}
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			t.Fatalf("invalid env entry: %q", entry)
+		}
+		values[key] = value
+	}
+
+	if values["ANTHROPIC_MODEL"] != "claude-main" {
+		t.Fatalf("ANTHROPIC_MODEL = %q, want claude-main", values["ANTHROPIC_MODEL"])
+	}
+	if _, ok := values["CLAUDE_CODE_SUBAGENT_MODEL"]; ok {
+		t.Fatalf("CLAUDE_CODE_SUBAGENT_MODEL should be cleared when not set in the plan")
+	}
+}

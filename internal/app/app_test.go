@@ -1313,11 +1313,11 @@ func TestRunExecutesTargetCommand(t *testing.T) {
 		t.Fatalf("run output missing arg1: %s", output)
 	}
 
-	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); !os.IsNotExist(err) {
-		t.Fatalf("expected codex config to remain untouched without --auto-sync, err = %v", err)
+	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); err != nil {
+		t.Fatalf("expected codex config to be synced before run: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".codex", "auth.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected codex auth to remain untouched without --auto-sync, err = %v", err)
+	if _, err := os.Stat(filepath.Join(home, ".codex", "auth.json")); err != nil {
+		t.Fatalf("expected codex auth to be synced before run: %v", err)
 	}
 }
 
@@ -1360,6 +1360,61 @@ func TestRunAutoSyncWritesExternalConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".codex", "auth.json")); err != nil {
 		t.Fatalf("expected codex auth to be synced with --auto-sync: %v", err)
+	}
+}
+
+func TestRunSyncsClaudeSettingsBeforeExecution(t *testing.T) {
+	home := setupTestHome(t)
+	binDir := filepath.Join(home, "bin")
+	prependTestPath(t, binDir)
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll binDir: %v", err)
+	}
+	script := "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone < \"$HOME/.claude/settings.json\"\n"
+	scriptWin := "@echo off\r\ntype \"%USERPROFILE%\\.claude\\settings.json\"\r\n"
+	writeTestCommand(t, binDir, "claude", script, scriptWin)
+
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll settings dir: %v", err)
+	}
+	initial := `{
+  "model": "glm-5",
+  "env": {
+    "CLAUDE_CODE_MODEL": "glm-5"
+  }
+}`
+	if err := os.WriteFile(settingsPath, []byte(initial), 0o600); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{
+		"profile", "add",
+		"--name", "Claude Main",
+		"--command", "claude",
+		"--base-url", "https://api.anthropic.com",
+		"--api-key", "token",
+		"--model", "claude-main",
+		"--fast-model", "claude-fast",
+	}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"run"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run exitCode = %d, stdout = %s stderr = %s", exitCode, stdout.String(), stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, `"model": "claude-main"`) {
+		t.Fatalf("claude settings were not synced before run: %s", output)
+	}
+	if !strings.Contains(output, `"CLAUDE_CODE_MODEL": "claude-main"`) {
+		t.Fatalf("claude env model was not synced before run: %s", output)
 	}
 }
 

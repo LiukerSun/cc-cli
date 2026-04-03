@@ -63,7 +63,7 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 	dryRun := fs.Bool("dry-run", false, "print the execution plan instead of running it")
 	envOnly := fs.Bool("env-only", false, "print the environment variables instead of running the command")
 	autoInstall := fs.Bool("auto-install", false, "install the target CLI automatically when missing")
-	autoSync := fs.Bool("auto-sync", false, "write external Claude/Codex config before running")
+	autoSync := fs.Bool("auto-sync", false, "compatibility flag; external Claude/Codex config is already synced automatically when enabled for the profile")
 	bypass := fs.Bool("bypass", false, "enable bypass permissions")
 	fs.BoolVar(bypass, "y", false, "enable bypass permissions")
 
@@ -121,7 +121,7 @@ func runRunWithInput(stdin io.Reader, stdout, stderr io.Writer, home string, lay
 		return 1
 	}
 
-	if plan.Profile.SyncExternal && *autoSync {
+	if plan.Profile.SyncExternal {
 		if _, err := cfgsync.Apply(home, plan.Profile); err != nil {
 			fmt.Fprintf(stderr, "failed to sync external config: %v\n", err)
 			return 1
@@ -184,14 +184,14 @@ func printRunPlan(stdout io.Writer, home string, plan runner.Plan, autoInstall, 
 	fmt.Fprintf(stdout, "Command: %s\n", plan.Command)
 	fmt.Fprintf(stdout, "Missing CLI policy: %s\n", runPolicy(autoInstall, "install automatically", "fail"))
 	fmt.Fprintf(stdout, "External sync: %s\n", yesNo(plan.Profile.SyncExternal))
-	fmt.Fprintf(stdout, "External sync policy: %s\n", runPolicy(plan.Profile.SyncExternal && autoSync, "write before run", "skip"))
+	fmt.Fprintf(stdout, "External sync policy: %s\n", runPolicy(plan.Profile.SyncExternal, "write before run", "skip"))
 	if plan.Profile.SyncExternal {
 		fmt.Fprintln(stdout, "Sync targets:")
 		for _, path := range cfgsync.TargetPaths(home, plan.Profile) {
 			fmt.Fprintf(stdout, "- %s\n", path)
 		}
-		if !autoSync {
-			fmt.Fprintf(stdout, "Note: external sync is configured but skipped by default. Use 'ccc sync %s' or rerun with --auto-sync.\n", plan.Profile.ID)
+		if autoSync {
+			fmt.Fprintln(stdout, "Note: --auto-sync is kept for compatibility; sync already happens by default for this profile.")
 		}
 	}
 	if len(plan.Args) == 0 {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/LiukerSun/cc-cli/internal/config"
 	"github.com/LiukerSun/cc-cli/internal/util"
@@ -44,7 +45,7 @@ func Run(plan Plan, stdout, stderr interface {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Env = append(os.Environ(), envList(plan.Env)...)
+	cmd.Env = commandEnv(plan)
 	return cmd.Run()
 }
 
@@ -140,4 +141,53 @@ func envList(env map[string]string) []string {
 		out = append(out, fmt.Sprintf("%s=%s", key, env[key]))
 	}
 	return out
+}
+
+func commandEnv(plan Plan) []string {
+	blocked := map[string]struct{}{}
+	for _, key := range managedEnvKeys(plan.Command) {
+		blocked[key] = struct{}{}
+	}
+	for key := range plan.Env {
+		blocked[key] = struct{}{}
+	}
+
+	base := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		key := entry
+		if idx := strings.IndexByte(entry, '='); idx >= 0 {
+			key = entry[:idx]
+		}
+		if _, skip := blocked[key]; skip {
+			continue
+		}
+		base = append(base, entry)
+	}
+
+	return append(base, envList(plan.Env)...)
+}
+
+func managedEnvKeys(command string) []string {
+	switch command {
+	case "codex":
+		return []string{
+			"OPENAI_BASE_URL",
+			"OPENAI_API_KEY",
+			"OPENAI_MODEL",
+			"OPENAI_SMALL_FAST_MODEL",
+		}
+	default:
+		return []string{
+			"ANTHROPIC_BASE_URL",
+			"ANTHROPIC_AUTH_TOKEN",
+			"ANTHROPIC_MODEL",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+			"ANTHROPIC_SMALL_FAST_MODEL",
+			"CLAUDE_CODE_MODEL",
+			"CLAUDE_CODE_SMALL_MODEL",
+			"CLAUDE_CODE_SUBAGENT_MODEL",
+			"CLAUDE_SKIP_PERMISSIONS",
+			"IS_SANDBOX",
+		}
+	}
 }

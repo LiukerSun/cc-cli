@@ -102,6 +102,54 @@ func TestApplyClaudeAppendsConfiguredDenyPermissions(t *testing.T) {
 	}
 }
 
+func TestApplyClaudeRemovesStaleSubagentModelWhenUnset(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	initial := `{
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "glm-5",
+    "CLAUDE_CODE_MODEL": "glm-5"
+  },
+  "model": "glm-5"
+}`
+	if err := os.WriteFile(settingsPath, []byte(initial), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := Apply(home, config.Profile{
+		Command:   "claude",
+		BaseURL:   "https://api.anthropic.com",
+		APIKey:    "token",
+		Model:     "claude-main",
+		FastModel: "claude-fast",
+	})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	env := doc["env"].(map[string]any)
+	if _, ok := env["CLAUDE_CODE_SUBAGENT_MODEL"]; ok {
+		t.Fatalf("stale CLAUDE_CODE_SUBAGENT_MODEL should be removed: %#v", env)
+	}
+	if env["CLAUDE_CODE_MODEL"] != "claude-main" {
+		t.Fatalf("unexpected CLAUDE_CODE_MODEL: %#v", env["CLAUDE_CODE_MODEL"])
+	}
+	if doc["model"] != "claude-main" {
+		t.Fatalf("model = %#v, want claude-main", doc["model"])
+	}
+}
+
 func TestApplyCodexPreservesUnknownFields(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")

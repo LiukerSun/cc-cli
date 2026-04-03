@@ -61,6 +61,8 @@ func applyClaude(home string, profile config.Profile) (Result, error) {
 	envMap["CLAUDE_CODE_SMALL_MODEL"] = fastModel
 	if profile.SubagentModel != "" {
 		envMap["CLAUDE_CODE_SUBAGENT_MODEL"] = profile.SubagentModel
+	} else {
+		delete(envMap, "CLAUDE_CODE_SUBAGENT_MODEL")
 	}
 	doc["model"] = profile.Model
 

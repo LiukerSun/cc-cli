@@ -96,7 +96,7 @@ ccc run zhipu-main -- --help     # 透传参数给目标 CLI
 ccc run --dry-run                # 预览执行计划
 ccc run --env-only               # 仅注入环境变量
 ccc run --auto-install           # 缺失目标 CLI 时允许自动安装
-ccc run --auto-sync              # 运行前允许写入外部配置
+ccc run --auto-sync              # 兼容旧用法；默认已会同步外部配置
 ccc -y                           # bypass 模式快捷入口
 ```
 
@@ -245,7 +245,7 @@ ccc run zhipu-main -- --help # 透传参数
 ccc run --dry-run            # 预览
 ccc run --env-only           # 仅注入环境变量
 ccc run --auto-install       # 缺失 codex/claude CLI 时自动安装
-ccc run --auto-sync          # 运行前同步 ~/.codex 或 ~/.claude
+ccc run --auto-sync          # 兼容旧用法；默认已同步 ~/.codex 或 ~/.claude
 ```
 
 `--dry-run` 展示的执行计划包括：
@@ -257,11 +257,11 @@ ccc run --auto-sync          # 运行前同步 ~/.codex 或 ~/.claude
 - 目标 CLI 收到的参数
 - 实际注入的环境变量
 
-`ccc run` 默认不再自动安装目标 CLI，也不再隐式写入外部配置。
-需要显式副作用时：
+`ccc run` 默认不会自动安装目标 CLI，但会在 profile 启用同步时先写入外部配置。
+需要显式控制时：
 
 - 用 `ccc run --auto-install ...` 允许自动安装缺失的 `claude` / `codex`
-- 用 `ccc run --auto-sync ...` 在运行前写入 `~/.claude` / `~/.codex`
+- `ccc run --auto-sync ...` 作为兼容参数仍可使用，但已不是必需
 - 或直接使用 `ccc sync` 单独执行配置同步
 
 ## `-y` / bypass
