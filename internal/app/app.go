@@ -98,7 +98,7 @@ func normalizeCompatibilityArgs(args []string) []string {
 	case "--add":
 		return append([]string{"add"}, args[1:]...)
 	case "--delete":
-		return append([]string{"profile", "delete"}, args[1:]...)
+		return append([]string{"profile", "delete", "--force"}, args[1:]...)
 	case "--current":
 		return []string{"current"}
 	case "-e":
@@ -331,7 +331,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  ccc profile export [profile-id-or-name] [--output <path>]")
 	fmt.Fprintln(w, "  ccc profile import [--input <path>] [--replace]")
 	fmt.Fprintln(w, "  ccc profile use <profile-id-or-name>")
-	fmt.Fprintln(w, "  ccc profile delete <profile-id-or-name>")
+	fmt.Fprintln(w, "  ccc profile delete <profile-id-or-name> [--force]")
 	fmt.Fprintln(w, "  ccc paths [--json]")
 	fmt.Fprintln(w, "  ccc config path")
 	fmt.Fprintln(w, "  ccc config show [--show-secrets]")

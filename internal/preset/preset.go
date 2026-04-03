@@ -23,8 +23,8 @@ var definitions = map[string]Definition{
 		Provider:  "anthropic",
 		Command:   "claude",
 		BaseURL:   "https://api.anthropic.com",
-		Model:     "claude-3-7-sonnet",
-		FastModel: "claude-3-5-haiku",
+		Model:     "claude-sonnet-4-6",
+		FastModel: "claude-haiku-4-5",
 	},
 	"openai": {
 		Name:      "Codex OpenAI",

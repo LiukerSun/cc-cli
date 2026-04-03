@@ -24,7 +24,7 @@ func runCurrent(stdout, stderr io.Writer, home string, layout platform.Layout) i
 	}
 
 	if cfg.CurrentProfile == "" {
-		fmt.Fprintln(stdout, "No current profile selected.")
+		fmt.Fprintln(stdout, "No current profile selected. Use 'ccc profile use <id>' or run 'ccc' to select one interactively.")
 		return 0
 	}
 

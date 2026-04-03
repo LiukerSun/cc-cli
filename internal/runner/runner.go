@@ -56,7 +56,7 @@ func resolveProfile(cfg config.File, identifier string) (config.Profile, error) 
 	if identifier != "" {
 		profile, ok := cfg.FindProfile(identifier)
 		if !ok {
-			return config.Profile{}, fmt.Errorf("profile %q not found", identifier)
+			return config.Profile{}, fmt.Errorf("profile %q not found. Run 'ccc profile list' to see available profiles", identifier)
 		}
 		return profile, nil
 	}
@@ -64,7 +64,7 @@ func resolveProfile(cfg config.File, identifier string) (config.Profile, error) 
 	if cfg.CurrentProfile != "" {
 		profile, ok := cfg.FindProfile(cfg.CurrentProfile)
 		if !ok {
-			return config.Profile{}, fmt.Errorf("current profile %q not found", cfg.CurrentProfile)
+			return config.Profile{}, fmt.Errorf("current profile %q not found. Run 'ccc profile list' to see available profiles", cfg.CurrentProfile)
 		}
 		return profile, nil
 	}

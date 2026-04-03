@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -38,7 +39,7 @@ func runProfile(stdout, stderr io.Writer, home string, layout platform.Layout, a
 	case "use":
 		return runProfileUse(stdout, stderr, store, args[1:])
 	case "delete":
-		return runProfileDelete(stdout, stderr, store, args[1:])
+		return runProfileDelete(os.Stdin, stdout, stderr, store, args[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown profile command: %s\n", args[0])
 		return 1
@@ -112,6 +113,7 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 		fmt.Fprintf(stdout, "  Provider: %s\n", profile.Provider)
 		fmt.Fprintf(stdout, "  Base URL: %s\n", profile.BaseURL)
 		fmt.Fprintf(stdout, "  Model: %s\n", profile.Model)
+			fmt.Fprintf(stdout, "  API key: %s\n", config.MaskSecret(profile.APIKey))
 		if profile.FastModel != "" {
 			fmt.Fprintf(stdout, "  Fast model: %s\n", profile.FastModel)
 		}
@@ -223,7 +225,7 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 
 	profile, ok := cfg.FindProfile(identifier)
 	if !ok {
-		fmt.Fprintf(stderr, "profile %q not found\n", identifier)
+		fmt.Fprintf(stderr, "profile %q not found. Run 'ccc profile list' to see available profiles.\n", identifier)
 		return 1
 	}
 	previousID := profile.ID
@@ -299,7 +301,7 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 		fmt.Fprintf(stderr, "failed to update profile: %v\n", err)
 		return 1
 	} else if !ok {
-		fmt.Fprintf(stderr, "profile %q not found\n", identifier)
+		fmt.Fprintf(stderr, "profile %q not found. Run 'ccc profile list' to see available profiles.\n", identifier)
 		return 1
 	}
 
@@ -347,7 +349,7 @@ func runProfileDuplicate(stdout, stderr io.Writer, store config.Store, args []st
 
 	source, ok := cfg.FindProfile(identifier)
 	if !ok {
-		fmt.Fprintf(stderr, "profile %q not found\n", identifier)
+		fmt.Fprintf(stderr, "profile %q not found. Run 'ccc profile list' to see available profiles.\n", identifier)
 		return 1
 	}
 
@@ -418,7 +420,7 @@ func runProfileExport(stdout, stderr io.Writer, store config.Store, args []strin
 	if identifier != "" {
 		profile, ok := cfg.FindProfile(identifier)
 		if !ok {
-			fmt.Fprintf(stderr, "profile %q not found\n", identifier)
+			fmt.Fprintf(stderr, "profile %q not found. Run 'ccc profile list' to see available profiles.\n", identifier)
 			return 1
 		}
 		payload.Profiles = []config.Profile{profile}
@@ -568,9 +570,21 @@ func decodeProfileTransferFile(data []byte) (profileTransferFile, error) {
 	return profileTransferFile{}, fmt.Errorf("unsupported import format")
 }
 
-func runProfileDelete(stdout, stderr io.Writer, store config.Store, args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: ccc profile delete <profile-id-or-name>")
+func runProfileDelete(stdin io.Reader, stdout, stderr io.Writer, store config.Store, args []string) int {
+	identifier := ""
+	force := false
+	for _, arg := range args {
+		if arg == "--force" || arg == "-f" {
+			force = true
+		} else if identifier == "" {
+			identifier = arg
+		} else {
+			fmt.Fprintln(stderr, "usage: ccc profile delete <profile-id-or-name> [--force]")
+			return 1
+		}
+	}
+	if identifier == "" {
+		fmt.Fprintln(stderr, "usage: ccc profile delete <profile-id-or-name> [--force]")
 		return 1
 	}
 
@@ -580,12 +594,25 @@ func runProfileDelete(stdout, stderr io.Writer, store config.Store, args []strin
 		return 1
 	}
 
-	removed, ok := cfg.DeleteProfile(args[0])
+	profile, ok := cfg.FindProfile(identifier)
 	if !ok {
-		fmt.Fprintf(stderr, "profile %q not found\n", args[0])
+		fmt.Fprintf(stderr, "profile %q not found. Run 'ccc profile list' to see available profiles.\n", identifier)
 		return 1
 	}
 
+	if !force && stdinIsInteractive(stdin) {
+		reader := bufio.NewReader(stdin)
+		confirmed, err := promptWithDefault(reader, stdout, fmt.Sprintf("Delete profile %q (%s)? [y/N]", profile.Name, profile.ID), "n")
+		if err != nil {
+			return 1
+		}
+		if strings.ToLower(strings.TrimSpace(confirmed)) != "y" {
+			fmt.Fprintln(stdout, "Cancelled.")
+			return 0
+		}
+	}
+
+	removed, _ := cfg.DeleteProfile(identifier)
 	if err := store.Save(cfg); err != nil {
 		fmt.Fprintf(stderr, "failed to save config: %v\n", err)
 		return 1
@@ -609,7 +636,7 @@ func runProfileUse(stdout, stderr io.Writer, store config.Store, args []string) 
 
 	profile, ok := cfg.FindProfile(args[0])
 	if !ok {
-		fmt.Fprintf(stderr, "profile %q not found\n", args[0])
+		fmt.Fprintf(stderr, "profile %q not found. Run 'ccc profile list' to see available profiles.\n", args[0])
 		return 1
 	}
 

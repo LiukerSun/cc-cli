@@ -224,7 +224,7 @@ func TestTopLevelAddInteractiveZhipu(t *testing.T) {
 	stubInteractiveModelFetchers(t, []string{"glm-5", "glm-4.7"}, interactiveAlibabaFallbackModels)
 
 	store := config.NewStore(home, layout)
-	input := strings.NewReader("1\nzhipu-test-key\n2\n1\n\n")
+	input := strings.NewReader("3\nzhipu-test-key\n2\n1\n\n")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -269,7 +269,7 @@ func TestTopLevelAddInteractiveAlibaba(t *testing.T) {
 	stubInteractiveModelFetchers(t, interactiveZhipuFallbackModels, []string{"qwen3.5-plus", "qwen3-coder-next"})
 
 	store := config.NewStore(home, layout)
-	input := strings.NewReader("2\nalibaba-test-key\n2\n\n\n")
+	input := strings.NewReader("4\nalibaba-test-key\n2\n\n\n")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -309,7 +309,7 @@ func TestTopLevelAddInteractiveCodex(t *testing.T) {
 	}
 
 	store := config.NewStore(home, layout)
-	input := strings.NewReader("3\n\nsk-openai-test\n2\n\n")
+	input := strings.NewReader("2\n\nsk-openai-test\n2\n\n")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
