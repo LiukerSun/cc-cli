@@ -7,10 +7,17 @@ REPO_NAME="cc-cli"
 PROJECT_NAME="ccc"
 REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION_FILE="${SCRIPT_DIR}/VERSION"
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+VERSION_FILE=""
+if [ -n "$SCRIPT_DIR" ]; then
+    VERSION_FILE="${SCRIPT_DIR}/VERSION"
+fi
 LOCAL_VERSION="dev"
-if [ -f "${VERSION_FILE}" ]; then
+if [ -n "$VERSION_FILE" ] && [ -f "${VERSION_FILE}" ]; then
     LOCAL_VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}")"
 fi
 
@@ -21,6 +28,7 @@ RELEASES_DIR="${DATA_DIR}/releases"
 
 ACTION="install"
 REQUESTED_VERSION="${CCC_VERSION:-latest}"
+NO_SHELL_CONFIG="${CCC_NO_SHELL_CONFIG:-}"
 
 usage() {
     cat <<EOF
@@ -30,10 +38,12 @@ Usage:
   ./install.sh
   ./install.sh --version 2.2.1
   ./install.sh --uninstall
+  ./install.sh --no-shell-config
 
 Environment:
   CCC_VERSION            Version to install. Defaults to latest.
   CCC_INSTALL_BIN_DIR    Override the install directory. Defaults to ~/.local/bin.
+  CCC_NO_SHELL_CONFIG    Set to any value to skip shell configuration.
 
 Notes:
   - The installer installs the ${PROJECT_NAME} binary only.
@@ -60,6 +70,9 @@ parse_args() {
                 ;;
             --uninstall)
                 ACTION="uninstall"
+                ;;
+            --no-shell-config)
+                NO_SHELL_CONFIG=1
                 ;;
             --version)
                 [ $# -ge 2 ] || fail "--version requires a value"
@@ -92,6 +105,159 @@ detect_arch() {
             fail "unsupported architecture: $(uname -m)"
             ;;
     esac
+}
+
+# Detect shell type from $SHELL environment variable
+detect_shell() {
+    local shell_path="${SHELL:-}"
+    if [ -z "$shell_path" ]; then
+        echo "bash"
+        return
+    fi
+    local shell_name
+    shell_name="$(basename "$shell_path")"
+    case "$shell_name" in
+        bash|zsh|fish)
+            echo "$shell_name"
+            ;;
+        *)
+            echo "bash"
+            ;;
+    esac
+}
+
+# Get shell config file path based on shell type and OS
+get_shell_config_file() {
+    local shell_type="$1"
+    local os
+    os="$(detect_os)"
+
+    case "$shell_type" in
+        bash)
+            if [ "$os" = "darwin" ]; then
+                echo "${HOME}/.bash_profile"
+            else
+                echo "${HOME}/.bashrc"
+            fi
+            ;;
+        zsh)
+            echo "${HOME}/.zshrc"
+            ;;
+        fish)
+            echo "${HOME}/.config/fish/config.fish"
+            ;;
+        *)
+            echo "${HOME}/.bashrc"
+            ;;
+    esac
+}
+
+# Check if PATH already exists in config file
+is_path_in_config() {
+    local config_file="$1"
+    local path_to_check="$2"
+
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+
+    if grep -qF "$path_to_check" "$config_file" 2>/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Add PATH to bash/zsh config
+add_path_to_bash_config() {
+    local config_file="$1"
+    local bin_dir="$2"
+
+    # Create config file if it doesn't exist
+    local config_dir
+    config_dir="$(dirname "$config_file")"
+    mkdir -p "$config_dir"
+
+    # Append PATH export to config file
+    {
+        echo ""
+        echo "# Added by ${PROJECT_NAME} installer"
+        echo "export PATH=\"${bin_dir}:\$PATH\""
+    } >> "$config_file"
+}
+
+# Add PATH to fish config
+add_path_to_fish_config() {
+    local config_file="$1"
+    local bin_dir="$2"
+
+    # Create config file if it doesn't exist
+    local config_dir
+    config_dir="$(dirname "$config_file")"
+    mkdir -p "$config_dir"
+
+    # Append fish_add_path to config file
+    {
+        echo ""
+        echo "# Added by ${PROJECT_NAME} installer"
+        echo "fish_add_path ${bin_dir}"
+    } >> "$config_file"
+}
+
+# Configure shell by updating config file
+configure_shell() {
+    # Skip if NO_SHELL_CONFIG is set
+    if [ -n "$NO_SHELL_CONFIG" ]; then
+        return 0
+    fi
+
+    # Skip if install directory is already in PATH
+    case ":${PATH}:" in
+        *":${INSTALL_BIN_DIR}:"*)
+            log ""
+            log "${INSTALL_BIN_DIR} is already in PATH."
+            return 0
+            ;;
+    esac
+
+    local shell_type
+    shell_type="$(detect_shell)"
+    local config_file
+    config_file="$(get_shell_config_file "$shell_type")"
+
+    # Check if already configured
+    if is_path_in_config "$config_file" "$INSTALL_BIN_DIR"; then
+        log ""
+        log "${INSTALL_BIN_DIR} is already configured in ${config_file}."
+        log "Please reload your shell configuration or open a new terminal."
+        return 0
+    fi
+
+    # Add PATH to config file
+    case "$shell_type" in
+        fish)
+            add_path_to_fish_config "$config_file" "$INSTALL_BIN_DIR"
+            ;;
+        *)
+            add_path_to_bash_config "$config_file" "$INSTALL_BIN_DIR"
+            ;;
+    esac
+
+    log ""
+    log "Updated ${config_file} to add ${INSTALL_BIN_DIR} to PATH."
+    log "Please reload your shell configuration:"
+    case "$shell_type" in
+        bash)
+            log "  source ${config_file}"
+            ;;
+        zsh)
+            log "  source ${config_file}"
+            ;;
+        fish)
+            log "  source ${config_file}"
+            ;;
+    esac
+    log "Or open a new terminal."
 }
 
 normalize_tag() {
@@ -243,7 +409,7 @@ main() {
         exit 0
     fi
 
-    if [ -f "${SCRIPT_DIR}/go.mod" ] && [ -d "${SCRIPT_DIR}/cmd/ccc" ] && { [ "$REQUESTED_VERSION" = "latest" ] || [ "$REQUESTED_VERSION" = "$LOCAL_VERSION" ] || [ "$REQUESTED_VERSION" = "v${LOCAL_VERSION}" ]; }; then
+    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/go.mod" ] && [ -d "${SCRIPT_DIR}/cmd/ccc" ] && { [ "$REQUESTED_VERSION" = "latest" ] || [ "$REQUESTED_VERSION" = "$LOCAL_VERSION" ] || [ "$REQUESTED_VERSION" = "v${LOCAL_VERSION}" ]; }; then
         install_from_local_checkout
     else
         install_from_release
@@ -251,6 +417,7 @@ main() {
 
     log ""
     log "${PROJECT_NAME} installed to ${INSTALL_PATH}"
+    configure_shell
     print_path_hint
     log ""
     log "Run '${PROJECT_NAME} version' to verify the installation."

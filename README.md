@@ -50,6 +50,15 @@ irm https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.ps1 | iex
 - Linux / macOS: `~/.local/bin/ccc`
 - Windows: `%LOCALAPPDATA%\Programs\ccc\bin\ccc.exe`
 
+安装脚本会自动检测你的 shell 并将安装目录添加到 PATH（支持 Bash、Zsh、Fish）。如果已配置或不想自动配置，可使用：
+
+```bash
+# 跳过自动 shell 配置
+curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh | bash -s -- --no-shell-config
+# 或设置环境变量
+CCC_NO_SHELL_CONFIG=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/LiukerSun/cc-cli/main/install.sh)"
+```
+
 ### 2. 添加配置
 
 ```bash
