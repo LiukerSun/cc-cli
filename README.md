@@ -185,6 +185,13 @@ ccc add
 4. **Manual input** — 手动指定 `claude` 或 `codex`、Base URL、模型等字段
 
 在线拉取模型失败时会自动回退到内置模型列表，不会因接口请求卡死。
+
+当前内置的 Alibaba Coding Plan 回退模型列表：
+
+- 千问：`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max-2026-01-23`、`qwen3-coder-next`、`qwen3-coder-plus`
+- 智谱：`glm-5`、`glm-4.7`
+- Kimi：`kimi-k2.5`
+- MiniMax：`MiniMax-M2.5`
 交互录入 API Key 时默认不回显。
 
 ### 快捷模式
@@ -195,7 +202,7 @@ ccc add
 ccc add openai sk-xxx
 ccc add openai sk-xxx gpt-5.4
 ccc add zhipu sk-xxx glm-5
-ccc add alibaba sk-xxx qwen3.5-plus
+ccc add alibaba sk-xxx qwen3.6-plus
 ccc add anthropic sk-ant-xxx claude-3-7-sonnet
 ```
 

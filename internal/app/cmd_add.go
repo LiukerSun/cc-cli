@@ -261,7 +261,7 @@ func runAddAlibabaInteractive(stdin io.Reader, reader *bufio.Reader, stdout, std
 		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
 		return 1
 	}
-	fastModel, err := promptModelChoice(reader, stdout, "fast", models, util.FirstNonEmpty(initial.FastModel, mainModel), true)
+	fastModel, err := promptModelChoice(reader, stdout, "fast", models, util.FirstNonEmpty(initial.FastModel, "qwen3.5-plus"), true)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
 		return 1

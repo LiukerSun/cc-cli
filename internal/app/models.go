@@ -45,6 +45,7 @@ var interactiveZhipuFallbackModels = []string{
 }
 
 var interactiveAlibabaFallbackModels = []string{
+	"qwen3.6-plus",
 	"qwen3.5-plus",
 	"qwen3-max-2026-01-23",
 	"qwen3-coder-next",
@@ -52,7 +53,7 @@ var interactiveAlibabaFallbackModels = []string{
 	"glm-5",
 	"glm-4.7",
 	"kimi-k2.5",
-	"minimax-m2.5",
+	"MiniMax-M2.5",
 }
 
 func defaultFetchZhipuModels(apiKey string) ([]string, error) {

@@ -47,7 +47,7 @@ var definitions = map[string]Definition{
 		Provider:  "alibaba",
 		Command:   "claude",
 		BaseURL:   "https://coding.dashscope.aliyuncs.com/apps/anthropic",
-		Model:     "qwen3.5-plus",
+		Model:     "qwen3.6-plus",
 		FastModel: "qwen3.5-plus",
 	},
 }

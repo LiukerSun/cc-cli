@@ -266,10 +266,10 @@ func TestTopLevelAddInteractiveAlibaba(t *testing.T) {
 		t.Fatalf("ResolveLayout: %v", err)
 	}
 
-	stubInteractiveModelFetchers(t, interactiveZhipuFallbackModels, []string{"qwen3.5-plus", "qwen3-coder-next"})
+	stubInteractiveModelFetchers(t, interactiveZhipuFallbackModels, []string{"qwen3.6-plus", "qwen3.5-plus", "qwen3-coder-next"})
 
 	store := config.NewStore(home, layout)
-	input := strings.NewReader("4\nalibaba-test-key\n2\n\n\n")
+	input := strings.NewReader("4\nalibaba-test-key\n3\n\n\n")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -296,8 +296,8 @@ func TestTopLevelAddInteractiveAlibaba(t *testing.T) {
 	if profile.Model != "qwen3-coder-next" {
 		t.Fatalf("Model = %q, want qwen3-coder-next", profile.Model)
 	}
-	if profile.FastModel != "qwen3-coder-next" {
-		t.Fatalf("FastModel = %q, want qwen3-coder-next", profile.FastModel)
+	if profile.FastModel != "qwen3.5-plus" {
+		t.Fatalf("FastModel = %q, want qwen3.5-plus", profile.FastModel)
 	}
 }
 
@@ -449,7 +449,7 @@ func TestProfileAddAppliesAlibabaPresetDefaults(t *testing.T) {
 	if !strings.Contains(output, "Base URL: https://coding.dashscope.aliyuncs.com/apps/anthropic") {
 		t.Fatalf("current output missing preset base url: %s", output)
 	}
-	if !strings.Contains(output, "Model: qwen3.5-plus") {
+	if !strings.Contains(output, "Model: qwen3.6-plus") {
 		t.Fatalf("current output missing preset model: %s", output)
 	}
 }
