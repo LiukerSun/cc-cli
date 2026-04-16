@@ -104,6 +104,37 @@ func TestBuildPlanSetsClaudeBypassEnv(t *testing.T) {
 	}
 }
 
+func TestBuildPlanOmitsAnthropicAPIKeyForKimi(t *testing.T) {
+	cfg := config.File{
+		Version:        1,
+		CurrentProfile: "kimi-main",
+		Profiles: []config.Profile{
+			{
+				ID:           "kimi-main",
+				Name:         "Kimi Main",
+				Provider:     "kimi",
+				Command:      "claude",
+				BaseURL:      "https://api.kimi.com/coding/",
+				APIKey:       "kimi-key",
+				Model:        "K2.6-code-preview",
+				FastModel:    "K2.6-code-preview",
+				SyncExternal: true,
+			},
+		},
+	}
+
+	plan, err := BuildPlan(cfg, "", nil, false)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if plan.Env["ANTHROPIC_AUTH_TOKEN"] != "kimi-key" {
+		t.Fatalf("ANTHROPIC_AUTH_TOKEN = %q, want kimi-key", plan.Env["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if _, ok := plan.Env["ANTHROPIC_API_KEY"]; ok {
+		t.Fatalf("ANTHROPIC_API_KEY should not be set for kimi profiles")
+	}
+}
+
 func TestEnvListStableOrder(t *testing.T) {
 	env := envList(map[string]string{"B": "2", "A": "1"})
 	got := strings.Join(env, ",")
@@ -143,5 +174,34 @@ func TestCommandEnvRemovesStaleManagedClaudeVars(t *testing.T) {
 	}
 	if _, ok := values["CLAUDE_CODE_SUBAGENT_MODEL"]; ok {
 		t.Fatalf("CLAUDE_CODE_SUBAGENT_MODEL should be cleared when not set in the plan")
+	}
+}
+
+func TestCommandEnvClearsStaleAnthropicAPIKeyWhenPlanOmitsIt(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "stale-key")
+
+	env := commandEnv(Plan{
+		Command: "claude",
+		Env: map[string]string{
+			"ANTHROPIC_AUTH_TOKEN": "kimi-key",
+			"ANTHROPIC_MODEL":      "K2.6-code-preview",
+			"CLAUDE_CODE_MODEL":    "K2.6-code-preview",
+		},
+	})
+
+	values := map[string]string{}
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			t.Fatalf("invalid env entry: %q", entry)
+		}
+		values[key] = value
+	}
+
+	if values["ANTHROPIC_AUTH_TOKEN"] != "kimi-key" {
+		t.Fatalf("ANTHROPIC_AUTH_TOKEN = %q, want kimi-key", values["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if _, ok := values["ANTHROPIC_API_KEY"]; ok {
+		t.Fatalf("ANTHROPIC_API_KEY should be removed when omitted from the plan")
 	}
 }

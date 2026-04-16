@@ -97,7 +97,9 @@ func profileEnv(profile config.Profile) map[string]string {
 	default:
 		env["ANTHROPIC_BASE_URL"] = profile.BaseURL
 		env["ANTHROPIC_AUTH_TOKEN"] = profile.APIKey
-		env["ANTHROPIC_API_KEY"] = profile.APIKey
+		if profile.Provider != "kimi" {
+			env["ANTHROPIC_API_KEY"] = profile.APIKey
+		}
 		env["ANTHROPIC_MODEL"] = profile.Model
 		fastModel := util.FirstNonEmpty(profile.FastModel, profile.Model)
 		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = fastModel
