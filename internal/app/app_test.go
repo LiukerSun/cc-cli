@@ -323,7 +323,7 @@ func TestTopLevelAddInteractiveKimi(t *testing.T) {
 		t.Fatalf("store.Load: %v", err)
 	}
 
-	profile, ok := cfg.FindProfile("kimi-coding-plan-kimi-for-coding")
+	profile, ok := cfg.FindProfile("kimi-coding-plan-k2-6-code-preview")
 	if !ok {
 		t.Fatalf("expected interactive add to create kimi profile: %+v", cfg.Profiles)
 	}
@@ -336,11 +336,11 @@ func TestTopLevelAddInteractiveKimi(t *testing.T) {
 	if profile.APIKey != "kimi-test-key" {
 		t.Fatalf("APIKey = %q, want kimi-test-key", profile.APIKey)
 	}
-	if profile.Model != "kimi-for-coding" {
-		t.Fatalf("Model = %q, want kimi-for-coding", profile.Model)
+	if profile.Model != "K2.6-code-preview" {
+		t.Fatalf("Model = %q, want K2.6-code-preview", profile.Model)
 	}
-	if profile.FastModel != "kimi-for-coding" {
-		t.Fatalf("FastModel = %q, want kimi-for-coding", profile.FastModel)
+	if profile.FastModel != "K2.6-code-preview" {
+		t.Fatalf("FastModel = %q, want K2.6-code-preview", profile.FastModel)
 	}
 }
 
@@ -529,7 +529,7 @@ func TestProfileAddAppliesKimiPresetDefaults(t *testing.T) {
 	if !strings.Contains(output, "Base URL: https://api.kimi.com/coding/") {
 		t.Fatalf("current output missing preset base url: %s", output)
 	}
-	if !strings.Contains(output, "Model: kimi-for-coding") {
+	if !strings.Contains(output, "Model: K2.6-code-preview") {
 		t.Fatalf("current output missing preset model: %s", output)
 	}
 }

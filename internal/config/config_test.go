@@ -93,8 +93,8 @@ func TestLoadLegacyConfigAcceptsAnthropicAPIKey(t *testing.T) {
     "env": {
       "ANTHROPIC_BASE_URL": "https://api.kimi.com/coding/",
       "ANTHROPIC_API_KEY": "token",
-      "ANTHROPIC_MODEL": "kimi-for-coding",
-      "ANTHROPIC_SMALL_FAST_MODEL": "kimi-for-coding"
+      "ANTHROPIC_MODEL": "K2.6-code-preview",
+      "ANTHROPIC_SMALL_FAST_MODEL": "K2.6-code-preview"
     }
   }
 ]`

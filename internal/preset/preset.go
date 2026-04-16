@@ -55,8 +55,8 @@ var definitions = map[string]Definition{
 		Provider:  "kimi",
 		Command:   "claude",
 		BaseURL:   "https://api.kimi.com/coding/",
-		Model:     "kimi-for-coding",
-		FastModel: "kimi-for-coding",
+		Model:     "K2.6-code-preview",
+		FastModel: "K2.6-code-preview",
 	},
 }
 

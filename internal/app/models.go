@@ -57,7 +57,7 @@ var interactiveAlibabaFallbackModels = []string{
 }
 
 var interactiveKimiFallbackModels = []string{
-	"kimi-for-coding",
+	"K2.6-code-preview",
 }
 
 func defaultFetchZhipuModels(apiKey string) ([]string, error) {

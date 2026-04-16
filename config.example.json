@@ -61,8 +61,8 @@
       "command": "claude",
       "base_url": "https://api.kimi.com/coding/",
       "api_key": "your-api-key-here",
-      "model": "kimi-for-coding",
-      "fast_model": "kimi-for-coding",
+      "model": "K2.6-code-preview",
+      "fast_model": "K2.6-code-preview",
       "sync_external": true
     }
   ]
