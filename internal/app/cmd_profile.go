@@ -127,22 +127,7 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) int {
 	fs := flag.NewFlagSet("profile add", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-
-	name := fs.String("name", "", "display name")
-	id := fs.String("id", "", "profile id")
-	presetName := fs.String("preset", "", "provider preset")
-	command := fs.String("command", "", "target command")
-	provider := fs.String("provider", "", "provider type")
-	baseURL := fs.String("base-url", "", "base URL")
-	apiKey := fs.String("api-key", "", "API key")
-	model := fs.String("model", "", "main model")
-	fastModel := fs.String("fast-model", "", "fast model")
-	subagentModel := fs.String("subagent-model", "", "subagent model (optional, overrides default subagent routing)")
-	noSync := fs.Bool("no-sync", false, "disable external sync")
-	envVars := kvFlag{}
-	denyPermissions := stringListFlag{}
-	fs.Var(&envVars, "env", "extra environment variable in KEY=VALUE form; repeatable")
-	fs.Var(&denyPermissions, "deny-permission", "append a Claude permissions.deny entry during sync; repeatable")
+	f := registerAddFlags(fs)
 
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(stderr, "failed to parse flags: %v\n", err)
@@ -152,21 +137,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi] --api-key ...")
 		return 1
 	}
-	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:                *name,
-		ID:                  *id,
-		PresetName:          *presetName,
-		Command:             *command,
-		Provider:            *provider,
-		BaseURL:             *baseURL,
-		APIKey:              *apiKey,
-		Model:               *model,
-		FastModel:           *fastModel,
-		SubagentModel:       *subagentModel,
-		NoSync:              *noSync,
-		EnvVars:             envVars.values,
-		SyncDenyPermissions: denyPermissions.values,
-	})
+	return addProfile(stdout, stderr, store, f.toOptions())
 }
 
 func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []string) int {

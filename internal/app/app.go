@@ -304,7 +304,6 @@ func runDoctor(stdout, stderr io.Writer, home string, layout platform.Layout, re
 		}
 	}
 
-	_ = stderr
 	if len(warnings) > 0 {
 		return 1
 	}

@@ -17,22 +17,7 @@ import (
 func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args []string) int {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-
-	name := fs.String("name", "", "display name")
-	id := fs.String("id", "", "profile id")
-	presetName := fs.String("preset", "", "provider preset")
-	command := fs.String("command", "", "target command")
-	provider := fs.String("provider", "", "provider type")
-	baseURL := fs.String("base-url", "", "base URL")
-	apiKey := fs.String("api-key", "", "API key")
-	model := fs.String("model", "", "main model")
-	fastModel := fs.String("fast-model", "", "fast model")
-	subagentModel := fs.String("subagent-model", "", "subagent model (optional, overrides default subagent routing)")
-	noSync := fs.Bool("no-sync", false, "disable external sync")
-	envVars := kvFlag{}
-	denyPermissions := stringListFlag{}
-	fs.Var(&envVars, "env", "extra environment variable in KEY=VALUE form; repeatable")
-	fs.Var(&denyPermissions, "deny-permission", "append a Claude permissions.deny entry during sync; repeatable")
+	f := registerAddFlags(fs)
 
 	positionalArgs := args
 	flagArgs := []string{}
@@ -57,45 +42,22 @@ func runAdd(stdout, stderr io.Writer, home string, layout platform.Layout, args 
 		return 1
 	}
 
-	if len(positionalArgs) >= 1 && strings.TrimSpace(*presetName) == "" {
-		*presetName = positionalArgs[0]
+	if len(positionalArgs) >= 1 && strings.TrimSpace(*f.PresetName) == "" {
+		*f.PresetName = positionalArgs[0]
 	}
-	if len(positionalArgs) >= 2 && strings.TrimSpace(*apiKey) == "" {
-		*apiKey = positionalArgs[1]
+	if len(positionalArgs) >= 2 && strings.TrimSpace(*f.APIKey) == "" {
+		*f.APIKey = positionalArgs[1]
 	}
-	if len(positionalArgs) >= 3 && strings.TrimSpace(*model) == "" {
-		*model = positionalArgs[2]
+	if len(positionalArgs) >= 3 && strings.TrimSpace(*f.Model) == "" {
+		*f.Model = positionalArgs[2]
 	}
 
 	store := config.NewStore(home, layout)
-	if len(positionalArgs) == 0 && strings.TrimSpace(*presetName) == "" && strings.TrimSpace(*apiKey) == "" {
-		return runAddInteractive(os.Stdin, stdout, stderr, store, addProfileOptions{
-			Name:                *name,
-			ID:                  *id,
-			BaseURL:             *baseURL,
-			Model:               *model,
-			FastModel:           *fastModel,
-			SubagentModel:       *subagentModel,
-			NoSync:              *noSync,
-			EnvVars:             envVars.values,
-			SyncDenyPermissions: denyPermissions.values,
-		})
+	if len(positionalArgs) == 0 && strings.TrimSpace(*f.PresetName) == "" && strings.TrimSpace(*f.APIKey) == "" {
+		return runAddInteractive(os.Stdin, stdout, stderr, store, f.toOptions())
 	}
 
-	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:                *name,
-		ID:                  *id,
-		PresetName:          *presetName,
-		Command:             *command,
-		Provider:            *provider,
-		BaseURL:             *baseURL,
-		APIKey:              *apiKey,
-		Model:               *model,
-		FastModel:           *fastModel,
-		NoSync:              *noSync,
-		EnvVars:             envVars.values,
-		SyncDenyPermissions: denyPermissions.values,
-	})
+	return addProfile(stdout, stderr, store, f.toOptions())
 }
 
 type addProfileOptions struct {
@@ -112,6 +74,61 @@ type addProfileOptions struct {
 	NoSync              bool
 	EnvVars             map[string]string
 	SyncDenyPermissions []string
+}
+
+type addFlagBindings struct {
+	Name            *string
+	ID              *string
+	PresetName      *string
+	Command         *string
+	Provider        *string
+	BaseURL         *string
+	APIKey          *string
+	Model           *string
+	FastModel       *string
+	SubagentModel   *string
+	NoSync          *bool
+	EnvVars         *kvFlag
+	DenyPermissions *stringListFlag
+}
+
+func registerAddFlags(fs *flag.FlagSet) addFlagBindings {
+	b := addFlagBindings{
+		EnvVars:         &kvFlag{},
+		DenyPermissions: &stringListFlag{},
+	}
+	b.Name = fs.String("name", "", "display name")
+	b.ID = fs.String("id", "", "profile id")
+	b.PresetName = fs.String("preset", "", "provider preset")
+	b.Command = fs.String("command", "", "target command")
+	b.Provider = fs.String("provider", "", "provider type")
+	b.BaseURL = fs.String("base-url", "", "base URL")
+	b.APIKey = fs.String("api-key", "", "API key")
+	b.Model = fs.String("model", "", "main model")
+	b.FastModel = fs.String("fast-model", "", "fast model")
+	b.SubagentModel = fs.String("subagent-model", "", "subagent model (optional, overrides default subagent routing)")
+	b.NoSync = fs.Bool("no-sync", false, "disable external sync")
+	fs.Var(b.EnvVars, "env", "extra environment variable in KEY=VALUE form; repeatable")
+	fs.Var(b.DenyPermissions, "deny-permission", "append a Claude permissions.deny entry during sync; repeatable")
+	return b
+}
+
+func (b addFlagBindings) toOptions() addProfileOptions {
+	return addProfileOptions{
+		Name:                *b.Name,
+		ID:                  *b.ID,
+		PresetName:          *b.PresetName,
+		Command:             *b.Command,
+		Provider:            *b.Provider,
+		BaseURL:             *b.BaseURL,
+		APIKey:              *b.APIKey,
+		Model:               *b.Model,
+		FastModel:           *b.FastModel,
+		SubagentModel:       *b.SubagentModel,
+		NoSync:              *b.NoSync,
+		EnvVars:             b.EnvVars.values,
+		SyncDenyPermissions: b.DenyPermissions.values,
+	}
 }
 
 func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
@@ -152,146 +169,105 @@ func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.S
 	}
 }
 
+type interactivePreset struct {
+	label          string
+	presetName     string
+	nameFmt        string
+	models         []string
+	fetchModels    func(apiKey string) ([]string, error)
+	fallbackModels []string
+	defaultMain    string
+	defaultFast    string
+	askSubagent    bool
+	askBaseURL     bool
+	fastIsMain     bool
+}
+
+var anthropicInteractivePreset = interactivePreset{
+	label:       "Anthropic Claude",
+	presetName:  "anthropic",
+	nameFmt:     "Claude (%s)",
+	models:      interactiveAnthropicModels,
+	defaultMain: "claude-sonnet-4-6",
+	defaultFast: "claude-haiku-4-5",
+	askSubagent: true,
+}
+
+var zhipuInteractivePreset = interactivePreset{
+	label:       "ZAI / ZHIPU AI",
+	presetName:  "zhipu",
+	nameFmt:     "ZHIPU (%s)",
+	models:      interactiveZhipuFallbackModels,
+	defaultMain: "glm-5",
+	askSubagent: true,
+}
+
+var alibabaInteractivePreset = interactivePreset{
+	label:       "Alibaba Coding Plan",
+	presetName:  "alibaba",
+	nameFmt:     "Alibaba Coding Plan (%s)",
+	models:      interactiveAlibabaFallbackModels,
+	defaultMain: interactiveAlibabaFallbackModels[0],
+	defaultFast: "qwen3.5-plus",
+}
+
+var kimiInteractivePreset = interactivePreset{
+	label:       "Kimi Coding Plan",
+	presetName:  "kimi",
+	nameFmt:     "Kimi Coding Plan (%s)",
+	models:      interactiveKimiFallbackModels,
+	defaultMain: interactiveKimiFallbackModels[0],
+}
+
+var codexInteractivePreset = interactivePreset{
+	label:       "OpenAI Codex",
+	presetName:  "openai",
+	nameFmt:     "Codex (%s)",
+	models:      interactiveCodexModels,
+	defaultMain: "gpt-5.4",
+	askBaseURL:  true,
+	fastIsMain:  true,
+}
+
 func runAddAnthropicInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Anthropic Claude")
-
-	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
-		return 1
-	}
-
-	mainModel, err := promptModelChoice(reader, stdout, "main", interactiveAnthropicModels, util.FirstNonEmpty(initial.Model, "claude-sonnet-4-6"), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
-		return 1
-	}
-	fastModel, err := promptModelChoice(reader, stdout, "fast", interactiveAnthropicModels, util.FirstNonEmpty(initial.FastModel, "claude-haiku-4-5"), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
-		return 1
-	}
-
-	subagentModel, _ := promptWithDefault(reader, stdout, "Subagent model (optional, press Enter to skip)", "")
-	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("Claude (%s)", mainModel))
-	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
-		return 1
-	}
-
-	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:          name,
-		ID:            initial.ID,
-		PresetName:    "anthropic",
-		APIKey:        apiKey,
-		Model:         mainModel,
-		FastModel:     fastModel,
-		SubagentModel: subagentModel,
-		NoSync:        initial.NoSync,
-		EnvVars:       initial.EnvVars,
-	})
+	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, anthropicInteractivePreset)
 }
 
 func runAddZhipuInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "ZAI / ZHIPU AI")
-
-	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
-		return 1
-	}
-
-	models, err := fetchZhipuModels(apiKey)
-	if err != nil {
-		fmt.Fprintf(stdout, "Failed to fetch ZAI model list, using built-in list: %v\n", err)
-		models = append([]string(nil), interactiveZhipuFallbackModels...)
-	}
-
-	mainModel, err := promptModelChoice(reader, stdout, "main", models, util.FirstNonEmpty(initial.Model, "glm-5"), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
-		return 1
-	}
-	fastModel, err := promptModelChoice(reader, stdout, "fast", models, util.FirstNonEmpty(initial.FastModel, mainModel), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
-		return 1
-	}
-
-	subagentModel, _ := promptWithDefault(reader, stdout, "Subagent model (optional, press Enter to skip)", "")
-	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("ZHIPU (%s)", mainModel))
-	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
-		return 1
-	}
-
-	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:          name,
-		ID:            initial.ID,
-		PresetName:    "zhipu",
-		APIKey:        apiKey,
-		Model:         mainModel,
-		FastModel:     fastModel,
-		SubagentModel: subagentModel,
-		NoSync:        initial.NoSync,
-		EnvVars:       initial.EnvVars,
-	})
+	preset := zhipuInteractivePreset
+	preset.fetchModels = fetchZhipuModels
+	preset.fallbackModels = interactiveZhipuFallbackModels
+	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, preset)
 }
 
 func runAddAlibabaInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Alibaba Coding Plan")
-
-	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
-		return 1
-	}
-
-	models, err := fetchAlibabaModels(apiKey)
-	if err != nil {
-		fmt.Fprintf(stdout, "Failed to fetch Alibaba model list, using built-in list: %v\n", err)
-		models = append([]string(nil), interactiveAlibabaFallbackModels...)
-	}
-
-	defaultMain := util.FirstNonEmpty(initial.Model, interactiveAlibabaFallbackModels[0])
-	mainModel, err := promptModelChoice(reader, stdout, "main", models, defaultMain, true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
-		return 1
-	}
-	fastModel, err := promptModelChoice(reader, stdout, "fast", models, util.FirstNonEmpty(initial.FastModel, "qwen3.5-plus"), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
-		return 1
-	}
-
-	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("Alibaba Coding Plan (%s)", mainModel))
-	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
-		return 1
-	}
-
-	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:       name,
-		ID:         initial.ID,
-		PresetName: "alibaba",
-		APIKey:     apiKey,
-		Model:      mainModel,
-		FastModel:  fastModel,
-		NoSync:     initial.NoSync,
-		EnvVars:    initial.EnvVars,
-	})
+	preset := alibabaInteractivePreset
+	preset.fetchModels = fetchAlibabaModels
+	preset.fallbackModels = interactiveAlibabaFallbackModels
+	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, preset)
 }
 
 func runAddKimiInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, kimiInteractivePreset)
+}
+
+func runAddCodexInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, codexInteractivePreset)
+}
+
+func runPresetInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions, preset interactivePreset) int {
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Kimi Coding Plan")
+	fmt.Fprintln(stdout, preset.label)
+
+	var baseURL string
+	if preset.askBaseURL {
+		var err error
+		baseURL, err = promptWithDefault(reader, stdout, "API base URL", util.FirstNonEmpty(initial.BaseURL, "https://api.openai.com/v1"))
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
+			return 1
+		}
+	}
 
 	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
 	if err != nil {
@@ -299,75 +275,71 @@ func runAddKimiInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr
 		return 1
 	}
 
-	mainModel, err := promptModelChoice(reader, stdout, "main", interactiveKimiFallbackModels, util.FirstNonEmpty(initial.Model, interactiveKimiFallbackModels[0]), true)
+	models := preset.models
+	if preset.fetchModels != nil {
+		fetched, err := preset.fetchModels(apiKey)
+		if err != nil {
+			fmt.Fprintf(stdout, "Failed to fetch %s model list, using built-in list: %v\n", preset.label, err)
+			models = append([]string(nil), preset.fallbackModels...)
+		} else {
+			models = fetched
+		}
+	}
+
+	defaultMain := preset.defaultMain
+	if defaultMain == "" && len(models) > 0 {
+		defaultMain = models[0]
+	}
+	mainModel, err := promptModelChoice(reader, stdout, "main", models, util.FirstNonEmpty(initial.Model, defaultMain), true)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
 		return 1
 	}
-	fastModel, err := promptModelChoice(reader, stdout, "fast", interactiveKimiFallbackModels, util.FirstNonEmpty(initial.FastModel, mainModel), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
-		return 1
+
+	var fastModel string
+	if preset.fastIsMain {
+		fastModel = mainModel
+	} else {
+		defaultFast := preset.defaultFast
+		if defaultFast == "" {
+			defaultFast = mainModel
+		}
+		fastModel, err = promptModelChoice(reader, stdout, "fast", models, util.FirstNonEmpty(initial.FastModel, defaultFast), true)
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
+			return 1
+		}
 	}
 
-	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("Kimi Coding Plan (%s)", mainModel))
+	var subagentModel string
+	if preset.askSubagent {
+		subagentModel, _ = promptWithDefault(reader, stdout, "Subagent model (optional, press Enter to skip)", "")
+	}
+
+	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf(preset.nameFmt, mainModel))
 	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
 		return 1
 	}
 
-	return addProfile(stdout, stderr, store, addProfileOptions{
+	opts := addProfileOptions{
 		Name:       name,
 		ID:         initial.ID,
-		PresetName: "kimi",
+		PresetName: preset.presetName,
 		APIKey:     apiKey,
 		Model:      mainModel,
 		FastModel:  fastModel,
 		NoSync:     initial.NoSync,
 		EnvVars:    initial.EnvVars,
-	})
-}
-
-func runAddCodexInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "OpenAI Codex")
-
-	baseURL, err := promptWithDefault(reader, stdout, "API base URL", util.FirstNonEmpty(initial.BaseURL, "https://api.openai.com/v1"))
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
-		return 1
 	}
-	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
-		return 1
+	if preset.askBaseURL {
+		opts.BaseURL = util.NormalizeCodexBaseURL(baseURL)
 	}
-
-	mainModel, err := promptModelChoice(reader, stdout, "main", interactiveCodexModels, util.FirstNonEmpty(initial.Model, "gpt-5.4"), true)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read model: %v\n", err)
-		return 1
+	if preset.askSubagent {
+		opts.SubagentModel = subagentModel
 	}
-
-	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("Codex (%s)", mainModel))
-	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
-	if err != nil {
-		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
-		return 1
-	}
-
-	return addProfile(stdout, stderr, store, addProfileOptions{
-		Name:       name,
-		ID:         initial.ID,
-		PresetName: "openai",
-		BaseURL:    util.NormalizeCodexBaseURL(baseURL),
-		APIKey:     apiKey,
-		Model:      mainModel,
-		FastModel:  mainModel,
-		NoSync:     initial.NoSync,
-		EnvVars:    initial.EnvVars,
-	})
+	return addProfile(stdout, stderr, store, opts)
 }
 
 func runAddManualInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {

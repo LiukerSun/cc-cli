@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -57,6 +58,15 @@ type Plan struct {
 
 type latestReleaseResponse struct {
 	TagName string `json:"tag_name"`
+}
+
+type httpStatusError struct {
+	StatusCode int
+	URL        string
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("unexpected status %d for %s", e.StatusCode, e.URL)
 }
 
 func DefaultManager(currentVersion, executablePath, goos, goarch string) Manager {
@@ -159,10 +169,27 @@ func (m Manager) Upgrade(ctx context.Context, plan Plan) error {
 }
 
 func (m Manager) fetchLatestVersion(ctx context.Context) (string, error) {
+	version, err := m.fetchLatestVersionFromAPI(ctx)
+	if err == nil {
+		return version, nil
+	}
+
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) && (statusErr.StatusCode == http.StatusForbidden || statusErr.StatusCode == http.StatusTooManyRequests) {
+		version, fallbackErr := m.fetchLatestVersionFromWeb(ctx)
+		if fallbackErr == nil {
+			return version, nil
+		}
+		return "", fmt.Errorf("fetch latest release metadata: %w (fallback failed: %v)", err, fallbackErr)
+	}
+	return "", fmt.Errorf("fetch latest release metadata: %w", err)
+}
+
+func (m Manager) fetchLatestVersionFromAPI(ctx context.Context) (string, error) {
 	url := strings.TrimRight(m.APIBaseURL, "/") + "/repos/" + m.RepoOwner + "/" + m.RepoName + "/releases/latest"
-	body, err := m.download(ctx, url)
+	body, err := m.downloadJSON(ctx, url)
 	if err != nil {
-		return "", fmt.Errorf("fetch latest release metadata: %w", err)
+		return "", err
 	}
 
 	var payload latestReleaseResponse
@@ -172,6 +199,31 @@ func (m Manager) fetchLatestVersion(ctx context.Context) (string, error) {
 	version := normalizeVersion(payload.TagName)
 	if version == "" {
 		return "", errors.New("latest release metadata did not include a tag_name")
+	}
+	return version, nil
+}
+
+func (m Manager) fetchLatestVersionFromWeb(ctx context.Context) (string, error) {
+	url := strings.TrimRight(m.repositoryWebBaseURL(), "/") + "/releases/latest"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", m.ProjectName+"-upgrade")
+
+	resp, err := m.HTTPClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", &httpStatusError{StatusCode: resp.StatusCode, URL: url}
+	}
+
+	version := normalizeVersion(path.Base(resp.Request.URL.Path))
+	if version == "" {
+		return "", fmt.Errorf("latest release page did not resolve to a versioned tag: %s", resp.Request.URL.String())
 	}
 	return version, nil
 }
@@ -192,7 +244,6 @@ func (m Manager) download(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", m.ProjectName+"-upgrade")
 
 	resp, err := m.HTTPClient.Do(req)
@@ -202,9 +253,53 @@ func (m Manager) download(ctx context.Context, url string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected status %d for %s", resp.StatusCode, url)
+		return nil, &httpStatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 	return io.ReadAll(resp.Body)
+}
+
+func (m Manager) downloadJSON(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", m.ProjectName+"-upgrade")
+
+	if token := firstNonEmptyEnv("GH_TOKEN", "GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := m.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &httpStatusError{StatusCode: resp.StatusCode, URL: url}
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func (m Manager) repositoryWebBaseURL() string {
+	if m.DownloadBaseURL != "" {
+		base := strings.TrimRight(m.DownloadBaseURL, "/")
+		suffix := "/releases/download"
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return "https://github.com/" + m.RepoOwner + "/" + m.RepoName
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeVersion(value string) string {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/LiukerSun/cc-cli/internal/config"
 	"github.com/LiukerSun/cc-cli/internal/platform"
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 var completionShells = []string{"bash", "zsh", "fish", "powershell"}
@@ -86,22 +87,6 @@ var profileSubcommands = []string{
 var profileListFlags = []string{
 	"--json",
 	"--show-secrets",
-}
-
-var profileAddFlags = []string{
-	"--name",
-	"--id",
-	"--preset",
-	"--command",
-	"--provider",
-	"--base-url",
-	"--api-key",
-	"--model",
-	"--fast-model",
-	"--subagent-model",
-	"--no-sync",
-	"--env",
-	"--deny-permission",
 }
 
 var profileUpdateFlags = []string{
@@ -334,12 +319,12 @@ func completeRun(home string, layout platform.Layout, args []string) ([]string, 
 	}
 	current := args[len(args)-1]
 	if strings.HasPrefix(current, "-") || current == "" {
-		if !hasRunProfileArg(args) {
+		if !hasPositionalArg(args) {
 			return mergeCompletionGroups(runFlags, loadProfileIDs(home, layout)), nil
 		}
 		return runFlags, nil
 	}
-	if !hasRunProfileArg(args) {
+	if !hasPositionalArg(args) {
 		return loadProfileIDs(home, layout), nil
 	}
 	return nil, nil
@@ -392,7 +377,7 @@ func completeProfile(home string, layout platform.Layout, args []string) ([]stri
 
 func completeProfileAdd(args []string) []string {
 	if len(args) == 0 {
-		return profileAddFlags
+		return addFlags
 	}
 	prev := previousArg(args)
 	if prev == "--preset" {
@@ -403,7 +388,7 @@ func completeProfileAdd(args []string) []string {
 	}
 	current := args[len(args)-1]
 	if strings.HasPrefix(current, "-") || current == "" {
-		return profileAddFlags
+		return addFlags
 	}
 	return nil
 }
@@ -430,19 +415,6 @@ func completeProfileWithIdentifier(args []string, home string, layout platform.L
 		return flags
 	}
 	return nil
-}
-
-func hasRunProfileArg(args []string) bool {
-	for _, arg := range args {
-		if arg == "--" {
-			return true
-		}
-		if strings.HasPrefix(arg, "-") || strings.TrimSpace(arg) == "" {
-			continue
-		}
-		return true
-	}
-	return false
 }
 
 func hasPositionalArg(args []string) bool {
@@ -491,7 +463,7 @@ func mergeCompletionGroups(groups ...[]string) []string {
 	for _, group := range groups {
 		merged = append(merged, group...)
 	}
-	return uniqueStrings(merged)
+	return util.UniqueStrings(merged)
 }
 
 func bashCompletionScript() string {

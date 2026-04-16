@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/LiukerSun/cc-cli/internal/platform"
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 const CurrentVersion = 1
@@ -161,7 +162,10 @@ func (p *Profile) normalize() {
 	p.Model = strings.TrimSpace(p.Model)
 	p.FastModel = strings.TrimSpace(p.FastModel)
 	p.SubagentModel = strings.TrimSpace(p.SubagentModel)
-	p.SyncDenyPermissions = normalizeStringList(p.SyncDenyPermissions)
+	p.SyncDenyPermissions = util.UniqueStrings(p.SyncDenyPermissions)
+	if len(p.SyncDenyPermissions) == 0 {
+		p.SyncDenyPermissions = nil
+	}
 
 	if p.Command == "" {
 		p.Command = "claude"
@@ -444,22 +448,3 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func normalizeStringList(values []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		out = append(out, trimmed)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}

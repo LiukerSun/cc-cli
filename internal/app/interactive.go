@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 type fileDescriptorInput interface {
@@ -85,7 +87,7 @@ func promptChoice(reader *bufio.Reader, stdout io.Writer, label string, max int)
 }
 
 func promptModelChoice(reader *bufio.Reader, stdout io.Writer, kind string, models []string, defaultValue string, allowCustom bool) (string, error) {
-	choices := uniqueStrings(models)
+	choices := util.UniqueStrings(models)
 	if allowCustom {
 		choices = append(choices, "Custom model ID")
 	}
@@ -101,14 +103,14 @@ func promptModelChoice(reader *bufio.Reader, stdout io.Writer, kind string, mode
 			if err != nil {
 				return "", err
 			}
-			return resolveModelChoice(reader, stdout, choices, value, kind)
+			return resolveModelChoice(reader, stdout, choices, value)
 		}
 		if allowCustom {
 			value, err := promptWithDefault(reader, stdout, fmt.Sprintf("Select %s model [1-%d]", kind, len(choices)), fmt.Sprintf("%d", len(choices)))
 			if err != nil {
 				return "", err
 			}
-			model, err := resolveModelChoice(reader, stdout, choices, value, kind)
+			model, err := resolveModelChoice(reader, stdout, choices, value)
 			if err != nil {
 				return "", err
 			}
@@ -124,7 +126,7 @@ func promptModelChoice(reader *bufio.Reader, stdout io.Writer, kind string, mode
 		if err != nil {
 			return "", err
 		}
-		model, err := resolveModelChoice(reader, stdout, choices, value, kind)
+		model, err := resolveModelChoice(reader, stdout, choices, value)
 		if err != nil {
 			fmt.Fprintln(stdout, err.Error())
 			continue
@@ -136,7 +138,7 @@ func promptModelChoice(reader *bufio.Reader, stdout io.Writer, kind string, mode
 	}
 }
 
-func resolveModelChoice(reader *bufio.Reader, stdout io.Writer, choices []string, value, kind string) (string, error) {
+func resolveModelChoice(reader *bufio.Reader, stdout io.Writer, choices []string, value string) (string, error) {
 	var choice int
 	if _, err := fmt.Sscanf(strings.TrimSpace(value), "%d", &choice); err != nil || choice < 1 || choice > len(choices) {
 		return "", fmt.Errorf("please enter a number between 1 and %d", len(choices))
@@ -149,7 +151,6 @@ func resolveModelChoice(reader *bufio.Reader, stdout io.Writer, choices []string
 		}
 		return customModel, nil
 	}
-	_ = kind
 	return model, nil
 }
 

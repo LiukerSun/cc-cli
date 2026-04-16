@@ -36,14 +36,10 @@ func Detect(home string) Detection {
 }
 
 func newCandidate(label, path string) Candidate {
+	_, err := os.Stat(path)
 	return Candidate{
 		Label:  label,
 		Path:   path,
-		Exists: pathExists(path),
+		Exists: err == nil,
 	}
-}
-
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

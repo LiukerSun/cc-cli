@@ -851,6 +851,37 @@ func TestUpgradeCheckReportsLatestVersion(t *testing.T) {
 	}
 }
 
+func TestUpgradeCheckFallsBackWhenGitHubAPIIsForbidden(t *testing.T) {
+	setupTestHome(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/LiukerSun/cc-cli/releases/latest":
+			http.Error(w, "rate limited", http.StatusForbidden)
+		case "/LiukerSun/cc-cli/releases/latest":
+			http.Redirect(w, r, "/LiukerSun/cc-cli/releases/tag/v2.3.5", http.StatusFound)
+		case "/LiukerSun/cc-cli/releases/tag/v2.3.5":
+			_, _ = io.WriteString(w, "release page")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("CCC_RELEASE_API_BASE_URL", server.URL)
+	t.Setenv("CCC_RELEASE_DOWNLOAD_BASE_URL", server.URL+"/LiukerSun/cc-cli/releases/download")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := Run([]string{"upgrade", "--check"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("upgrade --check exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Latest version: 2.3.5") {
+		t.Fatalf("upgrade --check output missing fallback latest version: %s", stdout.String())
+	}
+}
+
 func TestProfileUpdateRenamesCurrentProfileID(t *testing.T) {
 	setupTestHome(t)
 

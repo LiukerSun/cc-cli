@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/LiukerSun/cc-cli/internal/util"
 )
 
 var fetchZhipuModels = defaultFetchZhipuModels
@@ -65,7 +67,7 @@ func defaultFetchZhipuModels(apiKey string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return uniqueStrings(append(models, interactiveZhipuFallbackModels...)), nil
+	return util.UniqueStrings(append(models, interactiveZhipuFallbackModels...)), nil
 }
 
 func defaultFetchAlibabaModels(apiKey string) ([]string, error) {
@@ -80,7 +82,7 @@ func defaultFetchAlibabaModels(apiKey string) ([]string, error) {
 			filtered = append(filtered, model)
 		}
 	}
-	return uniqueStrings(append(filtered, interactiveAlibabaFallbackModels...)), nil
+	return util.UniqueStrings(append(filtered, interactiveAlibabaFallbackModels...)), nil
 }
 
 func fetchModels(method, url, apiKey string, parser func([]byte) ([]string, error)) ([]string, error) {
@@ -156,23 +158,6 @@ func parseAlibabaModelList(body []byte) ([]string, error) {
 	}
 	sort.Strings(models)
 	return models, nil
-}
-
-func uniqueStrings(values []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		out = append(out, trimmed)
-	}
-	return out
 }
 
 func indexOf(values []string, target string) int {

@@ -58,6 +58,43 @@ func TestPlanResolvesLatestRelease(t *testing.T) {
 	}
 }
 
+func TestPlanFallsBackWhenLatestReleaseAPIIsForbidden(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/LiukerSun/cc-cli/releases/latest":
+			http.Error(w, "rate limited", http.StatusForbidden)
+		case "/LiukerSun/cc-cli/releases/latest":
+			http.Redirect(w, r, "/LiukerSun/cc-cli/releases/tag/v2.2.2", http.StatusFound)
+		case "/LiukerSun/cc-cli/releases/tag/v2.2.2":
+			_, _ = io.WriteString(w, "release page")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	manager := Manager{
+		RepoOwner:       defaultRepoOwner,
+		RepoName:        defaultRepoName,
+		ProjectName:     defaultProjectName,
+		CurrentVersion:  "2.2.1",
+		ExecutablePath:  "/tmp/ccc",
+		GOOS:            "linux",
+		GOARCH:          "amd64",
+		APIBaseURL:      server.URL,
+		DownloadBaseURL: server.URL + "/LiukerSun/cc-cli/releases/download",
+		HTTPClient:      server.Client(),
+	}
+
+	plan, err := manager.Plan(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if plan.TargetVersion != "2.2.2" {
+		t.Fatalf("TargetVersion = %q, want 2.2.2", plan.TargetVersion)
+	}
+}
+
 func TestUpgradeReplacesUnixBinary(t *testing.T) {
 	archiveBytes := makeTarGzArchive(t, "ccc", []byte("#!/bin/sh\necho upgraded\n"))
 	sum := sha256.Sum256(archiveBytes)

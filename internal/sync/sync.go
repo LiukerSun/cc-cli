@@ -104,7 +104,7 @@ func applyCodex(home string, profile config.Profile) (Result, error) {
 	delete(configDoc, "openai_base_url")
 
 	providers := ensureMap(configDoc, "model_providers")
-	codexProvider := ensureNestedMap(providers, "codex")
+	codexProvider := ensureMap(providers, "codex")
 	codexProvider["name"] = "codex"
 	codexProvider["base_url"] = util.NormalizeCodexBaseURL(profile.BaseURL)
 	codexProvider["wire_api"] = "responses"
@@ -130,23 +130,6 @@ func applyCodex(home string, profile config.Profile) (Result, error) {
 func ensureMap(doc map[string]any, key string) map[string]any {
 	if existing, ok := doc[key].(map[string]any); ok {
 		return existing
-	}
-	newMap := map[string]any{}
-	doc[key] = newMap
-	return newMap
-}
-
-func ensureNestedMap(doc map[string]any, key string) map[string]any {
-	if existing, ok := doc[key].(map[string]any); ok {
-		return existing
-	}
-	if existing, ok := doc[key].(map[string]interface{}); ok {
-		out := map[string]any{}
-		for k, v := range existing {
-			out[k] = v
-		}
-		doc[key] = out
-		return out
 	}
 	newMap := map[string]any{}
 	doc[key] = newMap
