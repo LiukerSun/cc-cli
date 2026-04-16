@@ -99,6 +99,9 @@ func TestBuildPlanSetsClaudeBypassEnv(t *testing.T) {
 	if plan.Env["IS_SANDBOX"] != "1" {
 		t.Fatalf("IS_SANDBOX = %q", plan.Env["IS_SANDBOX"])
 	}
+	if plan.Env["ANTHROPIC_API_KEY"] != "test-key" {
+		t.Fatalf("ANTHROPIC_API_KEY = %q, want test-key", plan.Env["ANTHROPIC_API_KEY"])
+	}
 }
 
 func TestEnvListStableOrder(t *testing.T) {
@@ -111,12 +114,14 @@ func TestEnvListStableOrder(t *testing.T) {
 
 func TestCommandEnvRemovesStaleManagedClaudeVars(t *testing.T) {
 	t.Setenv("ANTHROPIC_MODEL", "stale-model")
+	t.Setenv("ANTHROPIC_API_KEY", "stale-key")
 	t.Setenv("CLAUDE_CODE_SUBAGENT_MODEL", "glm-5")
 
 	env := commandEnv(Plan{
 		Command: "claude",
 		Env: map[string]string{
 			"ANTHROPIC_MODEL":   "claude-main",
+			"ANTHROPIC_API_KEY": "claude-key",
 			"CLAUDE_CODE_MODEL": "claude-main",
 		},
 	})
@@ -132,6 +137,9 @@ func TestCommandEnvRemovesStaleManagedClaudeVars(t *testing.T) {
 
 	if values["ANTHROPIC_MODEL"] != "claude-main" {
 		t.Fatalf("ANTHROPIC_MODEL = %q, want claude-main", values["ANTHROPIC_MODEL"])
+	}
+	if values["ANTHROPIC_API_KEY"] != "claude-key" {
+		t.Fatalf("ANTHROPIC_API_KEY = %q, want claude-key", values["ANTHROPIC_API_KEY"])
 	}
 	if _, ok := values["CLAUDE_CODE_SUBAGENT_MODEL"]; ok {
 		t.Fatalf("CLAUDE_CODE_SUBAGENT_MODEL should be cleared when not set in the plan")

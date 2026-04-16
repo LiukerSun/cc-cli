@@ -172,6 +172,8 @@ var providerPresets = []string{
 	"qwen",
 	"dashscope",
 	"tongyi",
+	"kimi",
+	"moonshot",
 }
 
 var commandValues = []string{

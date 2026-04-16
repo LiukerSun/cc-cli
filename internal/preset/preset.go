@@ -50,6 +50,14 @@ var definitions = map[string]Definition{
 		Model:     "qwen3.6-plus",
 		FastModel: "qwen3.5-plus",
 	},
+	"kimi": {
+		Name:      "Kimi Coding Plan",
+		Provider:  "kimi",
+		Command:   "claude",
+		BaseURL:   "https://api.kimi.com/coding/",
+		Model:     "kimi-for-coding",
+		FastModel: "kimi-for-coding",
+	},
 }
 
 var aliases = map[string]string{
@@ -64,6 +72,8 @@ var aliases = map[string]string{
 	"dashscope": "alibaba",
 	"tongyi":    "alibaba",
 	"alibaba":   "alibaba",
+	"kimi":      "kimi",
+	"moonshot":  "kimi",
 }
 
 func Apply(profile config.Profile, name string) (config.Profile, error) {

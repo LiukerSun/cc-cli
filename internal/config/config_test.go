@@ -76,6 +76,46 @@ func TestLoadLegacyConfig(t *testing.T) {
 	}
 }
 
+func TestLoadLegacyConfigAcceptsAnthropicAPIKey(t *testing.T) {
+	home := t.TempDir()
+	layout, err := platform.ResolveLayout("linux", home, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+
+	legacyPath := filepath.Join(home, ".ccc", "config.json")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	content := `[
+  {
+    "name": "Kimi Coding Plan",
+    "env": {
+      "ANTHROPIC_BASE_URL": "https://api.kimi.com/coding/",
+      "ANTHROPIC_API_KEY": "token",
+      "ANTHROPIC_MODEL": "kimi-for-coding",
+      "ANTHROPIC_SMALL_FAST_MODEL": "kimi-for-coding"
+    }
+  }
+]`
+	if err := os.WriteFile(legacyPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	store := NewStore(home, layout)
+	cfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(cfg.Profiles) != 1 {
+		t.Fatalf("len(cfg.Profiles) = %d, want 1", len(cfg.Profiles))
+	}
+	if cfg.Profiles[0].APIKey != "token" {
+		t.Fatalf("profile.APIKey = %q, want token", cfg.Profiles[0].APIKey)
+	}
+}
+
 func TestSaveWritesCurrentSchema(t *testing.T) {
 	home := t.TempDir()
 	layout, err := platform.ResolveLayout("linux", home, func(string) string { return "" })

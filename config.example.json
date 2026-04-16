@@ -53,6 +53,17 @@
         "Agent(Explore)"
       ],
       "sync_external": true
+    },
+    {
+      "id": "kimi-coding-plan",
+      "name": "Kimi Coding Plan",
+      "provider": "kimi",
+      "command": "claude",
+      "base_url": "https://api.kimi.com/coding/",
+      "api_key": "your-api-key-here",
+      "model": "kimi-for-coding",
+      "fast_model": "kimi-for-coding",
+      "sync_external": true
     }
   ]
 }

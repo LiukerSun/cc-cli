@@ -98,4 +98,12 @@ func TestLookupSupportsAliases(t *testing.T) {
 	if definition.Command != "codex" {
 		t.Fatalf("Command = %q", definition.Command)
 	}
+
+	definition, err = Lookup("moonshot")
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if definition.Provider != "kimi" {
+		t.Fatalf("Provider = %q", definition.Provider)
+	}
 }

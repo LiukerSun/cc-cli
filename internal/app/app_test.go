@@ -301,6 +301,49 @@ func TestTopLevelAddInteractiveAlibaba(t *testing.T) {
 	}
 }
 
+func TestTopLevelAddInteractiveKimi(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+
+	store := config.NewStore(home, layout)
+	input := strings.NewReader("5\nkimi-test-key\n\n\n\n")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runAddInteractive(input, &stdout, &stderr, store, addProfileOptions{})
+	if exitCode != 0 {
+		t.Fatalf("runAddInteractive exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	cfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+
+	profile, ok := cfg.FindProfile("kimi-coding-plan-kimi-for-coding")
+	if !ok {
+		t.Fatalf("expected interactive add to create kimi profile: %+v", cfg.Profiles)
+	}
+	if profile.Provider != "kimi" {
+		t.Fatalf("Provider = %q, want kimi", profile.Provider)
+	}
+	if profile.BaseURL != "https://api.kimi.com/coding/" {
+		t.Fatalf("BaseURL = %q, want https://api.kimi.com/coding/", profile.BaseURL)
+	}
+	if profile.APIKey != "kimi-test-key" {
+		t.Fatalf("APIKey = %q, want kimi-test-key", profile.APIKey)
+	}
+	if profile.Model != "kimi-for-coding" {
+		t.Fatalf("Model = %q, want kimi-for-coding", profile.Model)
+	}
+	if profile.FastModel != "kimi-for-coding" {
+		t.Fatalf("FastModel = %q, want kimi-for-coding", profile.FastModel)
+	}
+}
+
 func TestTopLevelAddInteractiveCodex(t *testing.T) {
 	home := setupTestHome(t)
 	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
@@ -450,6 +493,43 @@ func TestProfileAddAppliesAlibabaPresetDefaults(t *testing.T) {
 		t.Fatalf("current output missing preset base url: %s", output)
 	}
 	if !strings.Contains(output, "Model: qwen3.6-plus") {
+		t.Fatalf("current output missing preset model: %s", output)
+	}
+}
+
+func TestProfileAddAppliesKimiPresetDefaults(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "kimi",
+		"--api-key", "kimi-test-key",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Run([]string{"current"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("current exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Name: Kimi Coding Plan") {
+		t.Fatalf("current output missing preset name: %s", output)
+	}
+	if !strings.Contains(output, "Provider: kimi") {
+		t.Fatalf("current output missing preset provider: %s", output)
+	}
+	if !strings.Contains(output, "Base URL: https://api.kimi.com/coding/") {
+		t.Fatalf("current output missing preset base url: %s", output)
+	}
+	if !strings.Contains(output, "Model: kimi-for-coding") {
 		t.Fatalf("current output missing preset model: %s", output)
 	}
 }

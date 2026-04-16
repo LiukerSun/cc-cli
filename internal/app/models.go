@@ -56,6 +56,10 @@ var interactiveAlibabaFallbackModels = []string{
 	"MiniMax-M2.5",
 }
 
+var interactiveKimiFallbackModels = []string{
+	"kimi-for-coding",
+}
+
 func defaultFetchZhipuModels(apiKey string) ([]string, error) {
 	models, err := fetchModels("GET", "https://open.bigmodel.cn/api/paas/v4/models", apiKey, parseIDModelList)
 	if err != nil {

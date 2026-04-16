@@ -97,6 +97,7 @@ func profileEnv(profile config.Profile) map[string]string {
 	default:
 		env["ANTHROPIC_BASE_URL"] = profile.BaseURL
 		env["ANTHROPIC_AUTH_TOKEN"] = profile.APIKey
+		env["ANTHROPIC_API_KEY"] = profile.APIKey
 		env["ANTHROPIC_MODEL"] = profile.Model
 		fastModel := util.FirstNonEmpty(profile.FastModel, profile.Model)
 		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = fastModel
@@ -180,6 +181,7 @@ func managedEnvKeys(command string) []string {
 		return []string{
 			"ANTHROPIC_BASE_URL",
 			"ANTHROPIC_AUTH_TOKEN",
+			"ANTHROPIC_API_KEY",
 			"ANTHROPIC_MODEL",
 			"ANTHROPIC_DEFAULT_HAIKU_MODEL",
 			"ANTHROPIC_SMALL_FAST_MODEL",

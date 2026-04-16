@@ -67,10 +67,12 @@ ccc add
 
 进入交互式添加流程，内置入口：
 
-1. `ZAI / ZHIPU AI`
-2. `Alibaba Coding Plan`
-3. `OpenAI Codex`
-4. `Manual input`
+1. `Anthropic Claude`
+2. `OpenAI Codex`
+3. `ZAI / ZHIPU AI`
+4. `Alibaba Coding Plan`
+5. `Kimi Coding Plan`
+6. `Manual input`
 
 ### 3. 运行
 
@@ -122,7 +124,7 @@ ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]
 ccc current
 ccc sync [profile] [--dry-run]
 ccc profile list [--json] [--show-secrets]
-ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...
+ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi] --api-key ...
 ccc profile update <profile> [--preset ...] [--model ...]
 ccc profile use <profile>
 ccc profile delete <profile>
@@ -179,10 +181,12 @@ ccc add
 
 内置入口：
 
-1. **ZAI / ZHIPU AI** — 输入 API Key，自动拉取模型列表，选择主模型和快速模型
-2. **Alibaba Coding Plan** — 输入 API Key，自动拉取模型列表，选择主模型和快速模型
-3. **OpenAI Codex** — 输入 Base URL、API Key、模型
-4. **Manual input** — 手动指定 `claude` 或 `codex`、Base URL、模型等字段
+1. **Anthropic Claude** — 输入 API Key，选择主模型和快速模型
+2. **OpenAI Codex** — 输入 Base URL、API Key、模型
+3. **ZAI / ZHIPU AI** — 输入 API Key，自动拉取模型列表，选择主模型和快速模型
+4. **Alibaba Coding Plan** — 输入 API Key，自动拉取模型列表，选择主模型和快速模型
+5. **Kimi Coding Plan** — 输入 API Key，默认使用 `https://api.kimi.com/coding/` 和 `kimi-for-coding`
+6. **Manual input** — 手动指定 `claude` 或 `codex`、Base URL、模型等字段
 
 在线拉取模型失败时会自动回退到内置模型列表，不会因接口请求卡死。
 
@@ -203,6 +207,7 @@ ccc add openai sk-xxx
 ccc add openai sk-xxx gpt-5.4
 ccc add zhipu sk-xxx glm-5
 ccc add alibaba sk-xxx qwen3.6-plus
+ccc add kimi sk-xxx kimi-for-coding
 ccc add anthropic sk-ant-xxx claude-3-7-sonnet
 ```
 
@@ -214,6 +219,14 @@ ccc add anthropic sk-ant-xxx claude-3-7-sonnet
 | `openai` | `codex`、`gpt` |
 | `zhipu` | `zai`、`glm` |
 | `alibaba` | `qwen`、`dashscope`、`tongyi` |
+| `kimi` | `moonshot` |
+
+Kimi preset 走 Claude 兼容入口 `https://api.kimi.com/coding/`。
+如果遇到 Kimi 文档里提到的 `tool_search` 相关 400，可对该 profile 追加：
+
+```bash
+ccc profile update my-kimi --env ENABLE_TOOL_SEARCH=false
+```
 
 ### 精细控制
 

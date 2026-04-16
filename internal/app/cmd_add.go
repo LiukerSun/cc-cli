@@ -123,10 +123,11 @@ func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.S
 	fmt.Fprintln(stdout, "  2) OpenAI Codex")
 	fmt.Fprintln(stdout, "  3) ZAI / ZHIPU AI")
 	fmt.Fprintln(stdout, "  4) Alibaba Coding Plan")
-	fmt.Fprintln(stdout, "  5) Manual input")
+	fmt.Fprintln(stdout, "  5) Kimi Coding Plan")
+	fmt.Fprintln(stdout, "  6) Manual input")
 
 	reader := bufio.NewReader(stdin)
-	choice, err := promptChoice(reader, stdout, "Choice", 5)
+	choice, err := promptChoice(reader, stdout, "Choice", 6)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read provider choice: %v\n", err)
 		return 1
@@ -142,6 +143,8 @@ func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.S
 	case 4:
 		return runAddAlibabaInteractive(stdin, reader, stdout, stderr, store, initial)
 	case 5:
+		return runAddKimiInteractive(stdin, reader, stdout, stderr, store, initial)
+	case 6:
 		return runAddManualInteractive(stdin, reader, stdout, stderr, store, initial)
 	default:
 		fmt.Fprintf(stderr, "invalid choice %d\n", choice)
@@ -278,6 +281,46 @@ func runAddAlibabaInteractive(stdin io.Reader, reader *bufio.Reader, stdout, std
 		Name:       name,
 		ID:         initial.ID,
 		PresetName: "alibaba",
+		APIKey:     apiKey,
+		Model:      mainModel,
+		FastModel:  fastModel,
+		NoSync:     initial.NoSync,
+		EnvVars:    initial.EnvVars,
+	})
+}
+
+func runAddKimiInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Kimi Coding Plan")
+
+	apiKey, err := promptSecretRequired(stdin, reader, stdout, "API key")
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read API key: %v\n", err)
+		return 1
+	}
+
+	mainModel, err := promptModelChoice(reader, stdout, "main", interactiveKimiFallbackModels, util.FirstNonEmpty(initial.Model, interactiveKimiFallbackModels[0]), true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read main model: %v\n", err)
+		return 1
+	}
+	fastModel, err := promptModelChoice(reader, stdout, "fast", interactiveKimiFallbackModels, util.FirstNonEmpty(initial.FastModel, mainModel), true)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read fast model: %v\n", err)
+		return 1
+	}
+
+	defaultName := util.FirstNonEmpty(initial.Name, fmt.Sprintf("Kimi Coding Plan (%s)", mainModel))
+	name, err := promptWithDefault(reader, stdout, "Display name", defaultName)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to read display name: %v\n", err)
+		return 1
+	}
+
+	return addProfile(stdout, stderr, store, addProfileOptions{
+		Name:       name,
+		ID:         initial.ID,
+		PresetName: "kimi",
 		APIKey:     apiKey,
 		Model:      mainModel,
 		FastModel:  fastModel,

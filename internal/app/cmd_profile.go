@@ -113,7 +113,7 @@ func runProfileList(stdout, stderr io.Writer, store config.Store, args []string)
 		fmt.Fprintf(stdout, "  Provider: %s\n", profile.Provider)
 		fmt.Fprintf(stdout, "  Base URL: %s\n", profile.BaseURL)
 		fmt.Fprintf(stdout, "  Model: %s\n", profile.Model)
-			fmt.Fprintf(stdout, "  API key: %s\n", config.MaskSecret(profile.APIKey))
+		fmt.Fprintf(stdout, "  API key: %s\n", config.MaskSecret(profile.APIKey))
 		if profile.FastModel != "" {
 			fmt.Fprintf(stdout, "  Fast model: %s\n", profile.FastModel)
 		}
@@ -149,7 +149,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba] --api-key ...")
+		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi] --api-key ...")
 		return 1
 	}
 	return addProfile(stdout, stderr, store, addProfileOptions{
@@ -171,7 +171,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 
 func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba] [--model ...]")
+		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba|kimi] [--model ...]")
 		return 1
 	}
 
@@ -209,7 +209,7 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba] [--model ...]")
+		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba|kimi] [--model ...]")
 		return 1
 	}
 	if sync.set && noSync.set {

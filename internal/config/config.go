@@ -422,10 +422,13 @@ func convertLegacyProfile(old legacyProfile) Profile {
 	default:
 		profile.BaseURL = strings.TrimSpace(old.Env["ANTHROPIC_BASE_URL"])
 		profile.APIKey = strings.TrimSpace(old.Env["ANTHROPIC_AUTH_TOKEN"])
+		if profile.APIKey == "" {
+			profile.APIKey = strings.TrimSpace(old.Env["ANTHROPIC_API_KEY"])
+		}
 		profile.Model = strings.TrimSpace(old.Env["ANTHROPIC_MODEL"])
 		profile.FastModel = strings.TrimSpace(old.Env["ANTHROPIC_SMALL_FAST_MODEL"])
 		for key, value := range old.Env {
-			if key == "ANTHROPIC_BASE_URL" || key == "ANTHROPIC_AUTH_TOKEN" || key == "ANTHROPIC_MODEL" || key == "ANTHROPIC_SMALL_FAST_MODEL" {
+			if key == "ANTHROPIC_BASE_URL" || key == "ANTHROPIC_AUTH_TOKEN" || key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_MODEL" || key == "ANTHROPIC_SMALL_FAST_MODEL" {
 				continue
 			}
 			profile.ExtraEnv[key] = value
