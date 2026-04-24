@@ -58,6 +58,14 @@ var definitions = map[string]Definition{
 		Model:     "K2.6-code-preview",
 		FastModel: "K2.6-code-preview",
 	},
+	"deepseek": {
+		Name:      "DeepSeek Coding",
+		Provider:  "deepseek",
+		Command:   "claude",
+		BaseURL:   "https://api.deepseek.com/anthropic",
+		Model:     "deepseek-v4-pro",
+		FastModel: "deepseek-v4-flash",
+	},
 }
 
 var aliases = map[string]string{
@@ -74,6 +82,8 @@ var aliases = map[string]string{
 	"alibaba":   "alibaba",
 	"kimi":      "kimi",
 	"moonshot":  "kimi",
+	"deepseek":  "deepseek",
+	"ds":        "deepseek",
 }
 
 func Apply(profile config.Profile, name string) (config.Profile, error) {

@@ -102,6 +102,9 @@ func TestBuildPlanSetsClaudeBypassEnv(t *testing.T) {
 	if plan.Env["ANTHROPIC_API_KEY"] != "test-key" {
 		t.Fatalf("ANTHROPIC_API_KEY = %q, want test-key", plan.Env["ANTHROPIC_API_KEY"])
 	}
+	if _, ok := plan.Env["ANTHROPIC_AUTH_TOKEN"]; ok {
+		t.Fatalf("ANTHROPIC_AUTH_TOKEN should not be set for anthropic profiles")
+	}
 }
 
 func TestBuildPlanOmitsAnthropicAPIKeyForKimi(t *testing.T) {
@@ -132,6 +135,49 @@ func TestBuildPlanOmitsAnthropicAPIKeyForKimi(t *testing.T) {
 	}
 	if _, ok := plan.Env["ANTHROPIC_API_KEY"]; ok {
 		t.Fatalf("ANTHROPIC_API_KEY should not be set for kimi profiles")
+	}
+}
+
+func TestBuildPlanUsesAnthropicEnvForDeepSeek(t *testing.T) {
+	cfg := config.File{
+		Version:        1,
+		CurrentProfile: "deepseek-main",
+		Profiles: []config.Profile{
+			{
+				ID:           "deepseek-main",
+				Name:         "DeepSeek Main",
+				Provider:     "deepseek",
+				Command:      "claude",
+				BaseURL:      "https://api.deepseek.com/anthropic",
+				APIKey:       "deepseek-key",
+				Model:        "deepseek-v4-pro",
+				FastModel:    "deepseek-v4-flash",
+				SyncExternal: true,
+			},
+		},
+	}
+
+	plan, err := BuildPlan(cfg, "", nil, false)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if plan.Command != "claude" {
+		t.Fatalf("plan.Command = %q, want claude", plan.Command)
+	}
+	if plan.Env["ANTHROPIC_BASE_URL"] != "https://api.deepseek.com/anthropic" {
+		t.Fatalf("ANTHROPIC_BASE_URL = %q, want https://api.deepseek.com/anthropic", plan.Env["ANTHROPIC_BASE_URL"])
+	}
+	if plan.Env["ANTHROPIC_AUTH_TOKEN"] != "deepseek-key" {
+		t.Fatalf("ANTHROPIC_AUTH_TOKEN = %q, want deepseek-key", plan.Env["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if _, ok := plan.Env["ANTHROPIC_API_KEY"]; ok {
+		t.Fatalf("ANTHROPIC_API_KEY should not be set for deepseek profiles")
+	}
+	if plan.Env["ANTHROPIC_MODEL"] != "deepseek-v4-pro" {
+		t.Fatalf("ANTHROPIC_MODEL = %q, want deepseek-v4-pro", plan.Env["ANTHROPIC_MODEL"])
+	}
+	if plan.Env["ANTHROPIC_SMALL_FAST_MODEL"] != "deepseek-v4-flash" {
+		t.Fatalf("ANTHROPIC_SMALL_FAST_MODEL = %q, want deepseek-v4-flash", plan.Env["ANTHROPIC_SMALL_FAST_MODEL"])
 	}
 }
 
@@ -203,5 +249,34 @@ func TestCommandEnvClearsStaleAnthropicAPIKeyWhenPlanOmitsIt(t *testing.T) {
 	}
 	if _, ok := values["ANTHROPIC_API_KEY"]; ok {
 		t.Fatalf("ANTHROPIC_API_KEY should be removed when omitted from the plan")
+	}
+}
+
+func TestCommandEnvClearsStaleAnthropicAuthTokenWhenPlanOmitsIt(t *testing.T) {
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "stale-token")
+
+	env := commandEnv(Plan{
+		Command: "claude",
+		Env: map[string]string{
+			"ANTHROPIC_API_KEY": "anthropic-key",
+			"ANTHROPIC_MODEL":   "claude-main",
+			"CLAUDE_CODE_MODEL": "claude-main",
+		},
+	})
+
+	values := map[string]string{}
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			t.Fatalf("invalid env entry: %q", entry)
+		}
+		values[key] = value
+	}
+
+	if values["ANTHROPIC_API_KEY"] != "anthropic-key" {
+		t.Fatalf("ANTHROPIC_API_KEY = %q, want anthropic-key", values["ANTHROPIC_API_KEY"])
+	}
+	if _, ok := values["ANTHROPIC_AUTH_TOKEN"]; ok {
+		t.Fatalf("ANTHROPIC_AUTH_TOKEN should be removed when omitted from the plan")
 	}
 }

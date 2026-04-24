@@ -106,4 +106,38 @@ func TestLookupSupportsAliases(t *testing.T) {
 	if definition.Provider != "kimi" {
 		t.Fatalf("Provider = %q", definition.Provider)
 	}
+
+	definition, err = Lookup("ds")
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if definition.Provider != "deepseek" {
+		t.Fatalf("Provider = %q", definition.Provider)
+	}
+}
+
+func TestApplyDeepSeekPresetDefaults(t *testing.T) {
+	profile, err := Apply(config.Profile{APIKey: "test-key"}, "deepseek")
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	if profile.Name != "DeepSeek Coding" {
+		t.Fatalf("Name = %q", profile.Name)
+	}
+	if profile.Provider != "deepseek" {
+		t.Fatalf("Provider = %q", profile.Provider)
+	}
+	if profile.Command != "claude" {
+		t.Fatalf("Command = %q", profile.Command)
+	}
+	if profile.BaseURL != "https://api.deepseek.com/anthropic" {
+		t.Fatalf("BaseURL = %q", profile.BaseURL)
+	}
+	if profile.Model != "deepseek-v4-pro" {
+		t.Fatalf("Model = %q", profile.Model)
+	}
+	if profile.FastModel != "deepseek-v4-flash" {
+		t.Fatalf("FastModel = %q", profile.FastModel)
+	}
 }

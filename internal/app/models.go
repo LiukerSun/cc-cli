@@ -62,6 +62,11 @@ var interactiveKimiFallbackModels = []string{
 	"K2.6-code-preview",
 }
 
+var interactiveDeepSeekModels = []string{
+	"deepseek-v4-pro",
+	"deepseek-v4-flash",
+}
+
 func defaultFetchZhipuModels(apiKey string) ([]string, error) {
 	models, err := fetchModels("GET", "https://open.bigmodel.cn/api/paas/v4/models", apiKey, parseIDModelList)
 	if err != nil {

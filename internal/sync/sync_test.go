@@ -150,6 +150,45 @@ func TestApplyClaudeRemovesStaleSubagentModelWhenUnset(t *testing.T) {
 	}
 }
 
+func TestApplyClaudeSupportsDeepSeekAnthropicEndpoint(t *testing.T) {
+	home := t.TempDir()
+
+	_, err := Apply(home, config.Profile{
+		Provider:  "deepseek",
+		Command:   "claude",
+		BaseURL:   "https://api.deepseek.com/anthropic",
+		APIKey:    "deepseek-key",
+		Model:     "deepseek-v4-pro",
+		FastModel: "deepseek-v4-flash",
+	})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	env := doc["env"].(map[string]any)
+	if env["ANTHROPIC_MODEL"] != "deepseek-v4-pro" {
+		t.Fatalf("ANTHROPIC_MODEL = %#v, want deepseek-v4-pro", env["ANTHROPIC_MODEL"])
+	}
+	if env["ANTHROPIC_SMALL_FAST_MODEL"] != "deepseek-v4-flash" {
+		t.Fatalf("ANTHROPIC_SMALL_FAST_MODEL = %#v, want deepseek-v4-flash", env["ANTHROPIC_SMALL_FAST_MODEL"])
+	}
+	if env["CLAUDE_CODE_MODEL"] != "deepseek-v4-pro" {
+		t.Fatalf("CLAUDE_CODE_MODEL = %#v, want deepseek-v4-pro", env["CLAUDE_CODE_MODEL"])
+	}
+	if doc["model"] != "deepseek-v4-pro" {
+		t.Fatalf("model = %#v, want deepseek-v4-pro", doc["model"])
+	}
+}
+
 func TestApplyCodexPreservesUnknownFields(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")

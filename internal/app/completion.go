@@ -159,6 +159,8 @@ var providerPresets = []string{
 	"tongyi",
 	"kimi",
 	"moonshot",
+	"deepseek",
+	"ds",
 }
 
 var commandValues = []string{

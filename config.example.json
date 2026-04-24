@@ -64,6 +64,17 @@
       "model": "K2.6-code-preview",
       "fast_model": "K2.6-code-preview",
       "sync_external": true
+    },
+    {
+      "id": "deepseek-coding",
+      "name": "DeepSeek Coding",
+      "provider": "deepseek",
+      "command": "claude",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "api_key": "your-api-key-here",
+      "model": "deepseek-v4-pro",
+      "fast_model": "deepseek-v4-flash",
+      "sync_external": true
     }
   ]
 }

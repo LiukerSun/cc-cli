@@ -72,7 +72,8 @@ ccc add
 3. `ZAI / ZHIPU AI`
 4. `Alibaba Coding Plan`
 5. `Kimi Coding Plan`
-6. `Manual input`
+6. `DeepSeek`
+7. `Manual input`
 
 ### 3. 运行
 
@@ -124,7 +125,7 @@ ccc add [<preset> <api-key> [model]] [--name ...] [--id ...]
 ccc current
 ccc sync [profile] [--dry-run]
 ccc profile list [--json] [--show-secrets]
-ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi] --api-key ...
+ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi|deepseek] --api-key ...
 ccc profile update <profile> [--preset ...] [--model ...]
 ccc profile use <profile>
 ccc profile delete <profile>
@@ -186,7 +187,8 @@ ccc add
 3. **ZAI / ZHIPU AI** — 输入 API Key，自动拉取模型列表，选择主模型和快速模型
 4. **Alibaba Coding Plan** — 输入 API Key，自动拉取模型列表，选择主模型和快速模型
 5. **Kimi Coding Plan** — 输入 API Key，默认使用 `https://api.kimi.com/coding/`，且模型列表仅提供 `K2.6-code-preview`
-6. **Manual input** — 手动指定 `claude` 或 `codex`、Base URL、模型等字段
+6. **DeepSeek** — 输入 API Key，默认使用 `https://api.deepseek.com/anthropic`，内置 `deepseek-v4-pro` 与 `deepseek-v4-flash`
+7. **Manual input** — 手动指定 `claude` 或 `codex`、Base URL、模型等字段
 
 在线拉取模型失败时会自动回退到内置模型列表，不会因接口请求卡死。
 
@@ -208,6 +210,7 @@ ccc add openai sk-xxx gpt-5.4
 ccc add zhipu sk-xxx glm-5
 ccc add alibaba sk-xxx qwen3.6-plus
 ccc add kimi sk-xxx K2.6-code-preview
+ccc add deepseek sk-xxx deepseek-v4-pro
 ccc add anthropic sk-ant-xxx claude-3-7-sonnet
 ```
 
@@ -220,6 +223,7 @@ ccc add anthropic sk-ant-xxx claude-3-7-sonnet
 | `zhipu` | `zai`、`glm` |
 | `alibaba` | `qwen`、`dashscope`、`tongyi` |
 | `kimi` | `moonshot` |
+| `deepseek` | `ds` |
 
 Kimi preset 走 Claude 兼容入口 `https://api.kimi.com/coding/`。
 如果遇到 Kimi 文档里提到的 `tool_search` 相关 400，可对该 profile 追加：
@@ -227,6 +231,8 @@ Kimi preset 走 Claude 兼容入口 `https://api.kimi.com/coding/`。
 ```bash
 ccc profile update my-kimi --env ENABLE_TOOL_SEARCH=false
 ```
+
+DeepSeek preset 走 Anthropic 兼容入口 `https://api.deepseek.com/anthropic`，默认主模型为 `deepseek-v4-pro`，默认快速模型为 `deepseek-v4-flash`，用于 `claude` / Claude Code 链路。
 
 ### 精细控制
 

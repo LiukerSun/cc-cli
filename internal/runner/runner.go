@@ -96,8 +96,9 @@ func profileEnv(profile config.Profile) map[string]string {
 		env["OPENAI_SMALL_FAST_MODEL"] = util.FirstNonEmpty(profile.FastModel, profile.Model)
 	default:
 		env["ANTHROPIC_BASE_URL"] = profile.BaseURL
-		env["ANTHROPIC_AUTH_TOKEN"] = profile.APIKey
-		if profile.Provider != "kimi" {
+		if usesAnthropicAuthToken(profile.Provider) {
+			env["ANTHROPIC_AUTH_TOKEN"] = profile.APIKey
+		} else {
 			env["ANTHROPIC_API_KEY"] = profile.APIKey
 		}
 		env["ANTHROPIC_MODEL"] = profile.Model
@@ -112,6 +113,15 @@ func profileEnv(profile config.Profile) map[string]string {
 	}
 
 	return env
+}
+
+func usesAnthropicAuthToken(provider string) bool {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "kimi", "deepseek":
+		return true
+	default:
+		return false
+	}
 }
 
 func bypassFlag(command string) string {

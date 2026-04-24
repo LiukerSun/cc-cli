@@ -344,6 +344,58 @@ func TestTopLevelAddInteractiveKimi(t *testing.T) {
 	}
 }
 
+func TestTopLevelAddInteractiveDeepSeek(t *testing.T) {
+	home := setupTestHome(t)
+	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
+	if err != nil {
+		t.Fatalf("ResolveLayout: %v", err)
+	}
+
+	store := config.NewStore(home, layout)
+	input := strings.NewReader("6\ndeepseek-test-key\n\n\n\n\n")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runAddInteractive(input, &stdout, &stderr, store, addProfileOptions{})
+	if exitCode != 0 {
+		t.Fatalf("runAddInteractive exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	cfg, _, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+
+	profile, ok := cfg.FindProfile("deepseek-deepseek-v4-pro")
+	if !ok {
+		t.Fatalf("expected interactive add to create deepseek profile: %+v", cfg.Profiles)
+	}
+	if profile.Provider != "deepseek" {
+		t.Fatalf("Provider = %q, want deepseek", profile.Provider)
+	}
+	if profile.Command != "claude" {
+		t.Fatalf("Command = %q, want claude", profile.Command)
+	}
+	if profile.BaseURL != "https://api.deepseek.com/anthropic" {
+		t.Fatalf("BaseURL = %q, want https://api.deepseek.com/anthropic", profile.BaseURL)
+	}
+	if profile.APIKey != "deepseek-test-key" {
+		t.Fatalf("APIKey = %q, want deepseek-test-key", profile.APIKey)
+	}
+	if profile.Model != "deepseek-v4-pro" {
+		t.Fatalf("Model = %q, want deepseek-v4-pro", profile.Model)
+	}
+	if profile.FastModel != "deepseek-v4-flash" {
+		t.Fatalf("FastModel = %q, want deepseek-v4-flash", profile.FastModel)
+	}
+	if profile.SubagentModel != "" {
+		t.Fatalf("SubagentModel = %q, want empty string", profile.SubagentModel)
+	}
+	if profile.Name != "DeepSeek (deepseek-v4-pro)" {
+		t.Fatalf("Name = %q, want DeepSeek (deepseek-v4-pro)", profile.Name)
+	}
+}
+
 func TestTopLevelAddInteractiveCodex(t *testing.T) {
 	home := setupTestHome(t)
 	layout, err := platform.ResolveLayout(runtime.GOOS, home, os.Getenv)
@@ -531,6 +583,49 @@ func TestProfileAddAppliesKimiPresetDefaults(t *testing.T) {
 	}
 	if !strings.Contains(output, "Model: K2.6-code-preview") {
 		t.Fatalf("current output missing preset model: %s", output)
+	}
+}
+
+func TestProfileAddAppliesDeepSeekPresetDefaults(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{
+		"profile", "add",
+		"--preset", "deepseek",
+		"--api-key", "deepseek-test-key",
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = Run([]string{"current"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("current exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Name: DeepSeek Coding") {
+		t.Fatalf("current output missing preset name: %s", output)
+	}
+	if !strings.Contains(output, "Provider: deepseek") {
+		t.Fatalf("current output missing preset provider: %s", output)
+	}
+	if !strings.Contains(output, "Command: claude") {
+		t.Fatalf("current output missing preset command: %s", output)
+	}
+	if !strings.Contains(output, "Base URL: https://api.deepseek.com/anthropic") {
+		t.Fatalf("current output missing preset base url: %s", output)
+	}
+	if !strings.Contains(output, "Model: deepseek-v4-pro") {
+		t.Fatalf("current output missing preset model: %s", output)
+	}
+	if !strings.Contains(output, "Fast model: deepseek-v4-flash") {
+		t.Fatalf("current output missing preset fast model: %s", output)
 	}
 }
 
@@ -1132,6 +1227,28 @@ func TestInternalCompleteProfileUpdateIdentifiers(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), "claude-main\n") {
 		t.Fatalf("completion output missing profile id: %s", stdout.String())
+	}
+}
+
+func TestInternalCompleteAddAndProfileIncludeDeepSeekPreset(t *testing.T) {
+	setupTestHome(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := Run([]string{"__complete", "add", ""}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("__complete add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "deepseek\n") {
+		t.Fatalf("add completion output missing deepseek preset: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := Run([]string{"__complete", "profile", "add", "--preset", ""}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("__complete profile add exitCode = %d, stderr = %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "deepseek\n") {
+		t.Fatalf("profile add completion output missing deepseek preset: %s", stdout.String())
 	}
 }
 

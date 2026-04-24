@@ -141,10 +141,11 @@ func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.S
 	fmt.Fprintln(stdout, "  3) ZAI / ZHIPU AI")
 	fmt.Fprintln(stdout, "  4) Alibaba Coding Plan")
 	fmt.Fprintln(stdout, "  5) Kimi Coding Plan")
-	fmt.Fprintln(stdout, "  6) Manual input")
+	fmt.Fprintln(stdout, "  6) DeepSeek")
+	fmt.Fprintln(stdout, "  7) Manual input")
 
 	reader := bufio.NewReader(stdin)
-	choice, err := promptChoice(reader, stdout, "Choice", 6)
+	choice, err := promptChoice(reader, stdout, "Choice", 7)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to read provider choice: %v\n", err)
 		return 1
@@ -162,6 +163,8 @@ func runAddInteractive(stdin io.Reader, stdout, stderr io.Writer, store config.S
 	case 5:
 		return runAddKimiInteractive(stdin, reader, stdout, stderr, store, initial)
 	case 6:
+		return runAddDeepSeekInteractive(stdin, reader, stdout, stderr, store, initial)
+	case 7:
 		return runAddManualInteractive(stdin, reader, stdout, stderr, store, initial)
 	default:
 		fmt.Fprintf(stderr, "invalid choice %d\n", choice)
@@ -219,6 +222,16 @@ var kimiInteractivePreset = interactivePreset{
 	defaultMain: interactiveKimiFallbackModels[0],
 }
 
+var deepSeekInteractivePreset = interactivePreset{
+	label:       "DeepSeek",
+	presetName:  "deepseek",
+	nameFmt:     "DeepSeek (%s)",
+	models:      interactiveDeepSeekModels,
+	defaultMain: "deepseek-v4-pro",
+	defaultFast: "deepseek-v4-flash",
+	askSubagent: true,
+}
+
 var codexInteractivePreset = interactivePreset{
 	label:       "OpenAI Codex",
 	presetName:  "openai",
@@ -251,6 +264,10 @@ func runAddKimiInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr
 	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, kimiInteractivePreset)
 }
 
+func runAddDeepSeekInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
+	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, deepSeekInteractivePreset)
+}
+
 func runAddCodexInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {
 	return runPresetInteractive(stdin, reader, stdout, stderr, store, initial, codexInteractivePreset)
 }
@@ -262,7 +279,7 @@ func runPresetInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr 
 	var baseURL string
 	if preset.askBaseURL {
 		var err error
-		baseURL, err = promptWithDefault(reader, stdout, "API base URL", util.FirstNonEmpty(initial.BaseURL, "https://api.openai.com/v1"))
+		baseURL, err = promptWithDefault(reader, stdout, "API base URL", util.FirstNonEmpty(initial.BaseURL, defaultInteractiveBaseURL(preset)))
 		if err != nil {
 			fmt.Fprintf(stderr, "failed to read API base URL: %v\n", err)
 			return 1
@@ -340,6 +357,10 @@ func runPresetInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr 
 		opts.SubagentModel = subagentModel
 	}
 	return addProfile(stdout, stderr, store, opts)
+}
+
+func defaultInteractiveBaseURL(preset interactivePreset) string {
+	return "https://api.openai.com/v1"
 }
 
 func runAddManualInteractive(stdin io.Reader, reader *bufio.Reader, stdout, stderr io.Writer, store config.Store, initial addProfileOptions) int {

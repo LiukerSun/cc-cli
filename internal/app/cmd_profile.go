@@ -134,7 +134,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi] --api-key ...")
+		fmt.Fprintln(stderr, "usage: ccc profile add [--name ...] [--preset anthropic|openai|zhipu|alibaba|kimi|deepseek] --api-key ...")
 		return 1
 	}
 	return addProfile(stdout, stderr, store, f.toOptions())
@@ -142,7 +142,7 @@ func runProfileAdd(stdout, stderr io.Writer, store config.Store, args []string) 
 
 func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba|kimi] [--model ...]")
+		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba|kimi|deepseek] [--model ...]")
 		return 1
 	}
 
@@ -180,7 +180,7 @@ func runProfileUpdate(stdout, stderr io.Writer, store config.Store, args []strin
 		return 1
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba|kimi] [--model ...]")
+		fmt.Fprintln(stderr, "usage: ccc profile update <profile-id-or-name> [--preset anthropic|openai|zhipu|alibaba|kimi|deepseek] [--model ...]")
 		return 1
 	}
 	if sync.set && noSync.set {
